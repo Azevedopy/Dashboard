@@ -37,7 +37,6 @@ export default function SuporteMetricsPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [calculatedMetrics, setCalculatedMetrics] = useState<{
     taxaResolucao: number
-    tempoMedio: number
   } | null>(null)
 
   // Formulário para métricas de suporte
@@ -99,22 +98,14 @@ export default function SuporteMetricsPage() {
     const values = supportForm.getValues()
     const chatsAbertos = values.chats_abertos
     const chatsFinalizados = values.chats_finalizados
-    const tempoAtendimento = values.tempo_atendimento
 
-    // Converter tempo de atendimento para minutos
-    const tempoTotalMinutos = convertTimeToMinutes(tempoAtendimento)
-
-    // Calcular as métricas
+    // Calcular a taxa de resolução
     const taxaResolucao = chatsAbertos > 0 ? (chatsFinalizados / chatsAbertos) * 100 : 0
-    const tempoMedio = chatsFinalizados > 0 ? tempoTotalMinutos / chatsFinalizados : 0
 
     setCalculatedMetrics({
       taxaResolucao: Number.parseFloat(taxaResolucao.toFixed(2)),
-      tempoMedio: Number.parseFloat(tempoMedio.toFixed(2)),
     })
   }
-
-  // No método onSubmitSupport, vamos adicionar logs para debug e garantir que a data esteja sendo tratada corretamente
 
   const onSubmitSupport = async (data: SupportFormValues) => {
     setIsSubmitting(true)
@@ -359,15 +350,9 @@ export default function SuporteMetricsPage() {
                     <Alert className="mt-4 bg-slate-50">
                       <AlertTitle>Métricas Calculadas</AlertTitle>
                       <AlertDescription>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
-                          <div>
-                            <p className="text-sm font-medium">Taxa de Resolução</p>
-                            <p className="text-lg font-bold">{calculatedMetrics.taxaResolucao}%</p>
-                          </div>
-                          <div>
-                            <p className="text-sm font-medium">Tempo Médio de Atendimento</p>
-                            <p className="text-lg font-bold">{calculatedMetrics.tempoMedio} minutos</p>
-                          </div>
+                        <div className="mt-2">
+                          <p className="text-sm font-medium">Taxa de Resolução</p>
+                          <p className="text-lg font-bold">{calculatedMetrics.taxaResolucao}%</p>
                         </div>
                       </AlertDescription>
                     </Alert>
