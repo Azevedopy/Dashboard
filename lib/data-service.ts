@@ -1,5 +1,6 @@
 import { getSupabase } from "./supabase"
 import type { Member, MetricEntry, DailyMetric, MemberMetrics } from "./types"
+import { format, parseISO, addDays } from "date-fns"
 
 // Função auxiliar para converter snake_case para camelCase
 function snakeToCamel(metrics: MetricEntry[]): MetricEntry[] {
@@ -13,6 +14,11 @@ function snakeToCamel(metrics: MetricEntry[]): MetricEntry[] {
     openTickets: metric.open_tickets,
     resolvedTickets: metric.resolved_tickets,
   }))
+}
+
+// Função para formatar números com 2 casas decimais
+function formatDecimal(value: number): number {
+  return Number.parseFloat(value.toFixed(2))
 }
 
 // Members
@@ -68,9 +74,6 @@ export async function createMember(member: Omit<Member, "id" | "joined_at" | "cr
 }
 
 // Metrics
-// Vamos modificar a função getMetrics para garantir que ela busque corretamente as métricas, incluindo as do dia 29/04
-
-// Na função getMetrics, vamos adicionar logs para debug e garantir que as datas estejam sendo tratadas corretamente
 export async function getMetrics(startDate?: string, endDate?: string): Promise<MetricEntry[]> {
   try {
     const supabase = getSupabase()
@@ -80,15 +83,15 @@ export async function getMetrics(startDate?: string, endDate?: string): Promise<
     let query = supabase.from("metrics").select("*").order("date", { ascending: false })
 
     if (startDate) {
+      // Usar a data exatamente como está, sem ajustes de fuso horário
       query = query.gte("date", startDate)
       console.log(`Filtrando métricas a partir de ${startDate}`)
     }
 
     if (endDate) {
       // Adicionar um dia ao endDate para incluir o próprio dia na consulta
-      const nextDay = new Date(endDate)
-      nextDay.setDate(nextDay.getDate() + 1)
-      const adjustedEndDate = nextDay.toISOString().split("T")[0]
+      const nextDay = addDays(parseISO(endDate), 1)
+      const adjustedEndDate = format(nextDay, "yyyy-MM-dd")
 
       query = query.lt("date", adjustedEndDate)
       console.log(`Filtrando métricas até ${endDate} (ajustado para ${adjustedEndDate})`)
@@ -107,10 +110,7 @@ export async function getMetrics(startDate?: string, endDate?: string): Promise<
       return []
     }
 
-    console.log(
-      `Encontradas ${metricsData.length} métricas. Primeiras datas:`,
-      metricsData.slice(0, 5).map((m) => m.date),
-    )
+    console.log(`Encontradas ${metricsData.length} métricas. Datas:`, metricsData.map((m) => m.date).sort())
 
     // Buscar todos os membros para mapear IDs para nomes
     const { data: membersData, error: membersError } = await supabase.from("members").select("id, name")
@@ -131,6 +131,8 @@ export async function getMetrics(startDate?: string, endDate?: string): Promise<
     const processedData = metricsData.map((metric) => ({
       ...metric,
       member: memberMap.get(metric.member_id) || "Desconhecido",
+      // Manter a data exatamente como está no banco
+      date: metric.date,
     }))
 
     // Adicionar propriedades em camelCase para compatibilidade
@@ -169,7 +171,10 @@ export async function getGenierMetrics(startDate?: string, endDate?: string): Pr
     }
 
     if (endDate) {
-      query = query.lte("date", endDate)
+      // Adicionar um dia ao endDate para incluir o próprio dia na consulta
+      const nextDay = addDays(parseISO(endDate), 1)
+      const adjustedEndDate = format(nextDay, "yyyy-MM-dd")
+      query = query.lt("date", adjustedEndDate)
     }
 
     const { data, error } = await query
@@ -213,7 +218,10 @@ export async function getMemberMetrics(memberId: string, startDate?: string, end
     }
 
     if (endDate) {
-      query = query.lte("date", endDate)
+      // Adicionar um dia ao endDate para incluir o próprio dia na consulta
+      const nextDay = addDays(parseISO(endDate), 1)
+      const adjustedEndDate = format(nextDay, "yyyy-MM-dd")
+      query = query.lt("date", adjustedEndDate)
     }
 
     const { data, error } = await query
@@ -235,17 +243,30 @@ export async function getMemberMetrics(memberId: string, startDate?: string, end
 export async function createMetric(metricData: any): Promise<MetricEntry | null> {
   try {
     const supabase = getSupabase()
+
+    // Usar a data exatamente como está, sem ajustes de fuso horário
+    const date = metricData.date
+    console.log(`Data a ser salva no banco: ${date}`)
+
+    // Formatar valores decimais para ter no máximo 2 casas decimais
+    const resolution_rate = formatDecimal(metricData.resolution_rate || 0)
+    const average_response_time = formatDecimal(metricData.average_response_time || 0)
+    const csat_score = formatDecimal(metricData.csat_score || 0)
+    const evaluated_percentage = formatDecimal(metricData.evaluated_percentage || 0)
+
     // Usar snake_case para os nomes das colunas (formato do banco)
     const data = {
       member_id: metricData.member_id,
-      date: metricData.date,
-      resolution_rate: metricData.resolution_rate,
-      average_response_time: metricData.average_response_time,
-      csat_score: metricData.csat_score,
-      evaluated_percentage: metricData.evaluated_percentage,
+      date: date,
+      resolution_rate: resolution_rate,
+      average_response_time: average_response_time,
+      csat_score: csat_score,
+      evaluated_percentage: evaluated_percentage,
       open_tickets: metricData.open_tickets,
       resolved_tickets: metricData.resolved_tickets,
     }
+
+    console.log("Dados formatados para inserção:", data)
 
     const { data: result, error } = await supabase.from("metrics").insert([data]).select().single()
 
@@ -253,6 +274,8 @@ export async function createMetric(metricData: any): Promise<MetricEntry | null>
       console.error("Error creating metric:", error)
       return null
     }
+
+    console.log("Métrica salva com sucesso:", result)
 
     // Adicionar propriedades em camelCase para compatibilidade
     return {
@@ -304,12 +327,12 @@ export async function getAggregatedMetrics(startDate?: string, endDate?: string)
       dailyMetrics[metric.date].resolved_tickets += metric.resolved_tickets
     })
 
-    // Calculate averages
+    // Calculate averages and format to 2 decimal places
     Object.keys(dailyMetrics).forEach((date) => {
-      dailyMetrics[date].resolution_rate /= memberCount
-      dailyMetrics[date].average_response_time /= memberCount
-      dailyMetrics[date].csat_score /= memberCount
-      dailyMetrics[date].evaluated_percentage /= memberCount
+      dailyMetrics[date].resolution_rate = formatDecimal(dailyMetrics[date].resolution_rate / memberCount)
+      dailyMetrics[date].average_response_time = formatDecimal(dailyMetrics[date].average_response_time / memberCount)
+      dailyMetrics[date].csat_score = formatDecimal(dailyMetrics[date].csat_score / memberCount)
+      dailyMetrics[date].evaluated_percentage = formatDecimal(dailyMetrics[date].evaluated_percentage / memberCount)
     })
 
     return Object.values(dailyMetrics).sort((a, b) => a.date.localeCompare(b.date))
@@ -327,7 +350,7 @@ export async function getTopPerformers(): Promise<MemberMetrics[]> {
     // Get metrics for the last 30 days
     const thirtyDaysAgo = new Date()
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
-    const startDate = thirtyDaysAgo.toISOString().split("T")[0]
+    const startDate = format(thirtyDaysAgo, "yyyy-MM-dd")
 
     const metrics = await getMetrics(startDate)
 
@@ -371,11 +394,11 @@ export async function uploadMetricsFromCSV(csvData: any[]): Promise<{ success: b
 
     const formattedData = csvData.map((row) => ({
       member_id: row.member_id,
-      date: row.date,
-      resolution_rate: Number.parseFloat(row.resolution_rate || "0"),
-      average_response_time: Number.parseFloat(row.average_response_time || "0"),
-      csat_score: Number.parseFloat(row.csat_score || "0"),
-      evaluated_percentage: Number.parseFloat(row.evaluated_percentage || "0"),
+      date: row.date, // Manter a data original do CSV
+      resolution_rate: formatDecimal(Number.parseFloat(row.resolution_rate || "0")),
+      average_response_time: formatDecimal(Number.parseFloat(row.average_response_time || "0")),
+      csat_score: formatDecimal(Number.parseFloat(row.csat_score || "0")),
+      evaluated_percentage: formatDecimal(Number.parseFloat(row.evaluated_percentage || "0")),
       open_tickets: Number.parseInt(row.open_tickets || "0", 10),
       resolved_tickets: Number.parseInt(row.resolved_tickets || "0", 10),
     }))

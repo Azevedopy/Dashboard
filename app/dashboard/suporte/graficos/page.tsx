@@ -1,9 +1,9 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { format, subDays } from "date-fns"
+import { format, subDays, parseISO, startOfMonth } from "date-fns"
 import { ptBR } from "date-fns/locale"
-import { CalendarIcon, RefreshCw, Filter, X } from "lucide-react"
+import { CalendarIcon, RefreshCw, Filter, X, Info } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -14,6 +14,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { getMembers, getMetrics } from "@/lib/data-service"
 import { MetricsPieChart } from "@/components/dashboard/metrics-pie-chart"
 import { MetricsLineChart } from "@/components/dashboard/metrics-line-chart"
@@ -33,6 +34,7 @@ export default function GraficosPage() {
   const [isCalendarOpen, setIsCalendarOpen] = useState(false)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [chartType, setChartType] = useState("line") // Default to line chart
+  const [debugInfo, setDebugInfo] = useState<string | null>(null)
 
   // Estado para o filtro de atendentes
   const [selectedMembers, setSelectedMembers] = useState<Record<string, boolean>>({})
@@ -64,8 +66,6 @@ export default function GraficosPage() {
     setFilteredMetrics(filtered)
   }, [metrics, selectedMembers])
 
-  // No método fetchData, vamos garantir que o período inclua o dia 29/04 e adicionar logs para debug
-
   const fetchData = async () => {
     setIsLoading(true)
     try {
@@ -73,50 +73,52 @@ export default function GraficosPage() {
       setMembers(membersData)
 
       let startDate
-      const endDate = format(new Date(), "yyyy-MM-dd")
-      console.log(`Data final: ${endDate}`)
+      // Usar a data atual
+      const today = new Date()
+      const endDate = format(today, "yyyy-MM-dd")
+
+      // Informações de debug
+      let debugText = `Data final: ${endDate}\n`
 
       // Atualizar o dateRange com base no período selecionado
       let newFrom
       switch (period) {
         case "7d":
-          newFrom = subDays(new Date(), 7)
+          newFrom = subDays(today, 7)
           startDate = format(newFrom, "yyyy-MM-dd")
+          debugText += `Período: 7 dias, Data inicial: ${startDate}\n`
           break
         case "15d":
-          newFrom = subDays(new Date(), 15)
+          newFrom = subDays(today, 15)
           startDate = format(newFrom, "yyyy-MM-dd")
+          debugText += `Período: 15 dias, Data inicial: ${startDate}\n`
           break
         case "30d":
         default:
-          // Garantir que o período de 30 dias inclua o dia 29/04
-          const today = new Date()
-          const april29 = new Date("2025-04-29") // Usando o ano atual para evitar problemas
+          // Usar o início do mês atual ou 30 dias atrás, o que for mais antigo
+          const startOfCurrentMonth = startOfMonth(today)
+          const thirtyDaysAgo = subDays(today, 30)
 
-          // Se hoje for depois de 29/04 e a diferença for menor que 30 dias, ajustar para incluir 29/04
-          if (today > april29 && (today.getTime() - april29.getTime()) / (1000 * 60 * 60 * 24) < 30) {
-            newFrom = new Date(april29)
-            newFrom.setDate(newFrom.getDate() - 1) // Um dia antes para garantir
-          } else {
-            newFrom = subDays(new Date(), 30)
-          }
+          // Usar a data mais antiga entre o início do mês e 30 dias atrás
+          newFrom = startOfCurrentMonth < thirtyDaysAgo ? startOfCurrentMonth : thirtyDaysAgo
+
           startDate = format(newFrom, "yyyy-MM-dd")
+          debugText += `Período: 30 dias, Data inicial: ${startDate}\n`
           break
       }
-
-      console.log(`Período selecionado: ${period}, Data inicial: ${startDate}, Data final: ${endDate}`)
 
       // Atualizar o estado do dateRange para refletir o período selecionado
       if (newFrom && period !== "custom") {
         setDateRange({
           from: newFrom,
-          to: new Date(),
+          to: today,
         })
       }
 
       // Buscar métricas
+      debugText += `Buscando métricas de ${startDate} até ${endDate}\n`
       const metricsData = await getMetrics(startDate, endDate)
-      console.log(`Métricas recebidas: ${metricsData.length}`)
+      debugText += `Métricas recebidas: ${metricsData.length}\n`
 
       // Adicionar nome do membro a cada métrica
       const metricsWithMemberNames = metricsData.map((metric) => {
@@ -127,16 +129,17 @@ export default function GraficosPage() {
         }
       })
 
-      console.log(`Métricas processadas: ${metricsWithMemberNames.length}`)
+      // Adicionar informações sobre as datas das métricas para debug
       if (metricsWithMemberNames.length > 0) {
-        console.log(`Primeira métrica: ${JSON.stringify(metricsWithMemberNames[0])}`)
+        const dates = metricsWithMemberNames.map((m) => m.date).sort()
+        debugText += `Datas das métricas: ${dates.join(", ")}\n`
       }
 
+      setDebugInfo(debugText)
       setMetrics(metricsWithMemberNames)
 
       // Inicializar o estado de seleção de membros
       const uniqueMembers = Array.from(new Set(metricsWithMemberNames.map((item) => item.member || "Desconhecido")))
-      console.log(`Membros únicos encontrados: ${uniqueMembers.join(", ")}`)
 
       // Manter as seleções existentes, mas adicionar novos membros
       setSelectedMembers((prev) => {
@@ -374,6 +377,21 @@ export default function GraficosPage() {
                 >
                   <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
                 </Button>
+
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button variant="outline" size="icon" className="relative">
+                        <Info className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p className="text-xs whitespace-pre-wrap max-w-xs">
+                        {debugInfo || "Nenhuma informação de debug disponível"}
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               </div>
             </div>
           </CardHeader>
@@ -397,7 +415,7 @@ export default function GraficosPage() {
 
               <div className="w-full md:w-1/3">
                 <label className="text-sm font-medium mb-2 block">Período</label>
-                <Tabs defaultValue={period} onValueChange={setPeriod} value={period} className="w-full">
+                <Tabs defaultValue={period} onValueChange={setPeriod} className="w-full">
                   <TabsList className="w-full">
                     <TabsTrigger value="7d" className="flex-1">
                       7 dias
@@ -421,10 +439,11 @@ export default function GraficosPage() {
                       {dateRange.from ? (
                         dateRange.to ? (
                           <>
-                            {format(dateRange.from, "dd/MM/yyyy")} - {format(dateRange.to, "dd/MM/yyyy")}
+                            {format(dateRange.from, "dd/MM/yyyy", { locale: ptBR })} -{" "}
+                            {format(dateRange.to, "dd/MM/yyyy", { locale: ptBR })}
                           </>
                         ) : (
-                          format(dateRange.from, "dd/MM/yyyy")
+                          format(dateRange.from, "dd/MM/yyyy", { locale: ptBR })
                         )
                       ) : (
                         "Selecione um período"
@@ -494,6 +513,38 @@ export default function GraficosPage() {
                 onMemberToggle={handleMemberToggle}
               />
             )}
+          </CardContent>
+        </Card>
+
+        {/* Exibir informações sobre as métricas carregadas */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Informações sobre os dados</CardTitle>
+            <CardDescription>Total de métricas carregadas: {metrics.length}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="text-sm">
+              <p className="font-medium mb-2">Período selecionado:</p>
+              <p>
+                De {dateRange.from ? format(dateRange.from, "dd/MM/yyyy", { locale: ptBR }) : "N/A"} até{" "}
+                {dateRange.to ? format(dateRange.to, "dd/MM/yyyy", { locale: ptBR }) : "N/A"}
+              </p>
+
+              {metrics.length > 0 && (
+                <>
+                  <p className="font-medium mt-4 mb-2">Datas das métricas:</p>
+                  <div className="flex flex-wrap gap-1">
+                    {Array.from(new Set(metrics.map((m) => m.date)))
+                      .sort()
+                      .map((date) => (
+                        <Badge key={date} variant="outline" className="text-xs">
+                          {format(parseISO(date), "dd/MM/yyyy", { locale: ptBR })}
+                        </Badge>
+                      ))}
+                  </div>
+                </>
+              )}
+            </div>
           </CardContent>
         </Card>
       </div>

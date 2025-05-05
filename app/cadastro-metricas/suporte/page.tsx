@@ -6,6 +6,8 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import { z } from "zod"
 import { ArrowLeft, Save, Calculator } from "lucide-react"
+import { format, parseISO } from "date-fns"
+import { ptBR } from "date-fns/locale"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -17,15 +19,15 @@ import { Toaster } from "@/components/ui/toaster"
 import { getSupabase } from "@/lib/supabase"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 
-// Form schema para métricas de suporte
+// Form schema para métricas de suporte - simplificado para evitar erros de validação
 const supportFormSchema = z.object({
   member_id: z.string().min(1, { message: "Selecione um atendente" }),
   date: z.string().min(1, { message: "Selecione uma data" }),
-  chats_abertos: z.coerce.number().min(0, { message: "Valor deve ser positivo" }),
-  chats_finalizados: z.coerce.number().min(0, { message: "Valor deve ser positivo" }),
-  tempo_atendimento: z.string().min(1, { message: "Informe o tempo de atendimento" }),
-  csat_score: z.string().optional(),
-  evaluated_percentage: z.string().optional(),
+  chats_abertos: z.coerce.number().min(0, { message: "Valor deve ser positivo" }).default(0),
+  chats_finalizados: z.coerce.number().min(0, { message: "Valor deve ser positivo" }).default(0),
+  tempo_atendimento: z.string().default("00:00:00"),
+  csat_score: z.string().optional().default(""),
+  evaluated_percentage: z.string().optional().default(""),
 })
 
 type SupportFormValues = z.infer<typeof supportFormSchema>
@@ -44,7 +46,7 @@ export default function SuporteMetricsPage() {
     resolver: zodResolver(supportFormSchema),
     defaultValues: {
       member_id: "",
-      date: new Date().toISOString().split("T")[0],
+      date: format(new Date(), "yyyy-MM-dd"),
       chats_abertos: 0,
       chats_finalizados: 0,
       tempo_atendimento: "00:00:00",
@@ -82,7 +84,15 @@ export default function SuporteMetricsPage() {
 
   // Função para converter tempo (hh:mm:ss) para minutos
   const convertTimeToMinutes = (timeString: string): number => {
-    const [hours = "0", minutes = "0", seconds = "0"] = timeString.split(":").map(Number)
+    if (!timeString || timeString === "00:00:00") return 0
+
+    // Verificar se o formato é hh:mm:ss ou apenas hh:mm
+    const parts = timeString.split(":")
+
+    const hours = parts.length > 0 ? Number.parseInt(parts[0], 10) || 0 : 0
+    const minutes = parts.length > 1 ? Number.parseInt(parts[1], 10) || 0 : 0
+    const seconds = parts.length > 2 ? Number.parseInt(parts[2], 10) || 0 : 0
+
     return hours * 60 + minutes + seconds / 60
   }
 
@@ -93,17 +103,22 @@ export default function SuporteMetricsPage() {
     return isNaN(parsed) ? 0 : parsed
   }
 
+  // Função para formatar números com 2 casas decimais
+  const formatDecimal = (value: number): number => {
+    return Number.parseFloat(value.toFixed(2))
+  }
+
   // Função para calcular as métricas com base nos dados inseridos
   const calculateMetrics = () => {
     const values = supportForm.getValues()
-    const chatsAbertos = values.chats_abertos
-    const chatsFinalizados = values.chats_finalizados
+    const chatsAbertos = values.chats_abertos || 0
+    const chatsFinalizados = values.chats_finalizados || 0
 
     // Calcular a taxa de resolução
     const taxaResolucao = chatsAbertos > 0 ? (chatsFinalizados / chatsAbertos) * 100 : 0
 
     setCalculatedMetrics({
-      taxaResolucao: Number.parseFloat(taxaResolucao.toFixed(2)),
+      taxaResolucao: formatDecimal(taxaResolucao),
     })
   }
 
@@ -113,34 +128,50 @@ export default function SuporteMetricsPage() {
     try {
       const supabase = getSupabase()
 
+      // IMPORTANTE: Usar a data exatamente como foi inserida, sem ajustes de fuso horário
+      const formattedDate = data.date
+
+      console.log(`Data original inserida: ${data.date}`)
+      console.log(`Data que será salva no banco: ${formattedDate}`)
+
       // Converter tempo de atendimento para minutos
       const tempoTotalMinutos = convertTimeToMinutes(data.tempo_atendimento)
 
       // Calcular a taxa de resolução
-      const taxaResolucao = data.chats_abertos > 0 ? (data.chats_finalizados / data.chats_abertos) * 100 : 0
+      const chatsAbertos = data.chats_abertos || 0
+      const chatsFinalizados = data.chats_finalizados || 0
+      const taxaResolucao = chatsAbertos > 0 ? (chatsFinalizados / chatsAbertos) * 100 : 0
 
       // Calcular o tempo médio de atendimento
-      const tempoMedio = data.chats_finalizados > 0 ? tempoTotalMinutos / data.chats_finalizados : 0
+      const tempoMedio = chatsFinalizados > 0 ? tempoTotalMinutos / chatsFinalizados : 0
+
+      // Formatar valores com 2 casas decimais
+      const formattedResolutionRate = formatDecimal(taxaResolucao)
+      const formattedAverageResponseTime = formatDecimal(tempoMedio)
+      const formattedCsatScore = formatDecimal(parseNumberOrZero(data.csat_score))
+      const formattedEvaluatedPercentage = formatDecimal(parseNumberOrZero(data.evaluated_percentage))
+
+      console.log(`Taxa de resolução original: ${taxaResolucao}, formatada: ${formattedResolutionRate}`)
+      console.log(`Tempo médio original: ${tempoMedio}, formatado: ${formattedAverageResponseTime}`)
 
       // Preparar os dados para salvar
       const metricsData = {
         member_id: data.member_id,
-        date: data.date,
-        resolution_rate: taxaResolucao,
-        average_response_time: tempoMedio,
-        csat_score: parseNumberOrZero(data.csat_score),
-        evaluated_percentage: parseNumberOrZero(data.evaluated_percentage),
-        open_tickets: data.chats_abertos,
-        resolved_tickets: data.chats_finalizados,
+        date: formattedDate,
+        resolution_rate: formattedResolutionRate,
+        average_response_time: formattedAverageResponseTime,
+        csat_score: formattedCsatScore,
+        evaluated_percentage: formattedEvaluatedPercentage,
+        open_tickets: chatsAbertos,
+        resolved_tickets: chatsFinalizados,
       }
 
-      console.log("Enviando dados calculados para Supabase:", metricsData)
+      console.log("Enviando dados para Supabase:", metricsData)
 
       // Inserir os dados calculados na tabela metrics
       const { data: insertedData, error } = await supabase.from("metrics").insert([metricsData]).select()
 
       if (error) {
-        console.error("Insert error:", error)
         throw new Error(`Erro ao inserir dados: ${error.message}`)
       }
 
@@ -149,7 +180,7 @@ export default function SuporteMetricsPage() {
       const member = members.find((m) => m.id === data.member_id)
       toast({
         title: "Métricas de suporte cadastradas com sucesso",
-        description: `Métricas de ${member?.name} para ${new Date(data.date).toLocaleDateString("pt-BR")} foram salvas.`,
+        description: `Métricas de ${member?.name} para ${format(parseISO(formattedDate), "dd/MM/yyyy", { locale: ptBR })} foram salvas.`,
       })
 
       // Reset form (but keep the member and date)
@@ -241,7 +272,14 @@ export default function SuporteMetricsPage() {
                         <FormItem>
                           <FormLabel>Data</FormLabel>
                           <FormControl>
-                            <Input type="date" {...field} />
+                            <Input
+                              type="date"
+                              {...field}
+                              onChange={(e) => {
+                                field.onChange(e)
+                                console.log("Data selecionada:", e.target.value)
+                              }}
+                            />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -255,7 +293,14 @@ export default function SuporteMetricsPage() {
                         <FormItem>
                           <FormLabel>Chats Abertos</FormLabel>
                           <FormControl>
-                            <Input type="number" min="0" {...field} />
+                            <Input
+                              type="number"
+                              min="0"
+                              {...field}
+                              onChange={(e) =>
+                                field.onChange(e.target.value === "" ? 0 : Number.parseInt(e.target.value, 10))
+                              }
+                            />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -269,7 +314,14 @@ export default function SuporteMetricsPage() {
                         <FormItem>
                           <FormLabel>Chats Finalizados</FormLabel>
                           <FormControl>
-                            <Input type="number" min="0" {...field} />
+                            <Input
+                              type="number"
+                              min="0"
+                              {...field}
+                              onChange={(e) =>
+                                field.onChange(e.target.value === "" ? 0 : Number.parseInt(e.target.value, 10))
+                              }
+                            />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -281,13 +333,13 @@ export default function SuporteMetricsPage() {
                       name="tempo_atendimento"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Tempo de Atendimento (hh:mm:ss)</FormLabel>
+                          <FormLabel>Tempo de Atendimento</FormLabel>
                           <FormControl>
-                            <Input type="time" step="1" {...field} />
+                            <Input type="text" placeholder="00:51:00" {...field} />
                           </FormControl>
                           <FormMessage />
                           <p className="text-xs text-muted-foreground">
-                            Tempo total gasto em todos os atendimentos (será convertido para minutos)
+                            Formato: hh:mm:ss (ex: 00:51:00 para 51 minutos)
                           </p>
                         </FormItem>
                       )}
@@ -329,13 +381,7 @@ export default function SuporteMetricsPage() {
                   </div>
 
                   <div className="flex justify-between items-center mt-6">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={calculateMetrics}
-                      className="gap-2"
-                      disabled={!supportForm.formState.isValid}
-                    >
+                    <Button type="button" variant="outline" onClick={calculateMetrics} className="gap-2">
                       <Calculator className="h-4 w-4" />
                       Calcular Métricas
                     </Button>

@@ -14,7 +14,8 @@ import {
 } from "recharts"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useResizeObserver } from "@/hooks/use-resize-observer"
-import { format } from "date-fns"
+import { format, parseISO } from "date-fns"
+import { ptBR } from "date-fns/locale"
 
 // Array de cores para as linhas dos diferentes membros
 const COLORS = [
@@ -75,24 +76,26 @@ export function MetricsLineChart({
       // Verificar se a data é válida
       let dateObj
       try {
-        dateObj = new Date(item.date)
+        // Usar a data exatamente como está, sem ajustes de fuso horário
+        dateObj = parseISO(item.date)
+
         // Verificar se a data é válida
         if (isNaN(dateObj.getTime())) {
           console.error(`Data inválida: ${item.date}`)
           return null
         }
+
+        return {
+          date: item.date,
+          value: item[metricType] || 0,
+          member: item.member || "Desconhecido",
+          memberId: item.member_id || "unknown",
+          // Usar a data sem ajustes de fuso horário
+          dateObj: dateObj,
+        }
       } catch (error) {
         console.error(`Erro ao processar data: ${item.date}`, error)
         return null
-      }
-
-      return {
-        date: item.date,
-        value: item[metricType] || 0,
-        member: item.member || "Desconhecido",
-        memberId: item.member_id || "unknown",
-        // Usar a data original para ordenação
-        dateObj: dateObj,
       }
     })
     .filter(Boolean) // Remover itens nulos
@@ -101,7 +104,8 @@ export function MetricsLineChart({
     })
     .map((item) => ({
       ...item,
-      formattedDate: format(item.dateObj, "dd/MM"),
+      // Formatar a data no padrão brasileiro (dia/mês)
+      formattedDate: format(item.dateObj, "dd/MM", { locale: ptBR }),
     }))
 
   // Adicionar log para debug
