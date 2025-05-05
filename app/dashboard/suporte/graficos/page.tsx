@@ -64,6 +64,8 @@ export default function GraficosPage() {
     setFilteredMetrics(filtered)
   }, [metrics, selectedMembers])
 
+  // No método fetchData, vamos garantir que o período inclua o dia 29/04 e adicionar logs para debug
+
   const fetchData = async () => {
     setIsLoading(true)
     try {
@@ -72,6 +74,7 @@ export default function GraficosPage() {
 
       let startDate
       const endDate = format(new Date(), "yyyy-MM-dd")
+      console.log(`Data final: ${endDate}`)
 
       // Atualizar o dateRange com base no período selecionado
       let newFrom
@@ -86,10 +89,22 @@ export default function GraficosPage() {
           break
         case "30d":
         default:
-          newFrom = subDays(new Date(), 30)
+          // Garantir que o período de 30 dias inclua o dia 29/04
+          const today = new Date()
+          const april29 = new Date("2025-04-29") // Usando o ano atual para evitar problemas
+
+          // Se hoje for depois de 29/04 e a diferença for menor que 30 dias, ajustar para incluir 29/04
+          if (today > april29 && (today.getTime() - april29.getTime()) / (1000 * 60 * 60 * 24) < 30) {
+            newFrom = new Date(april29)
+            newFrom.setDate(newFrom.getDate() - 1) // Um dia antes para garantir
+          } else {
+            newFrom = subDays(new Date(), 30)
+          }
           startDate = format(newFrom, "yyyy-MM-dd")
           break
       }
+
+      console.log(`Período selecionado: ${period}, Data inicial: ${startDate}, Data final: ${endDate}`)
 
       // Atualizar o estado do dateRange para refletir o período selecionado
       if (newFrom && period !== "custom") {
@@ -99,8 +114,9 @@ export default function GraficosPage() {
         })
       }
 
-      // Buscar apenas métricas do tipo "suporte"
-      const metricsData = await getMetrics(startDate, endDate, "suporte")
+      // Buscar métricas
+      const metricsData = await getMetrics(startDate, endDate)
+      console.log(`Métricas recebidas: ${metricsData.length}`)
 
       // Adicionar nome do membro a cada métrica
       const metricsWithMemberNames = metricsData.map((metric) => {
@@ -111,10 +127,16 @@ export default function GraficosPage() {
         }
       })
 
+      console.log(`Métricas processadas: ${metricsWithMemberNames.length}`)
+      if (metricsWithMemberNames.length > 0) {
+        console.log(`Primeira métrica: ${JSON.stringify(metricsWithMemberNames[0])}`)
+      }
+
       setMetrics(metricsWithMemberNames)
 
       // Inicializar o estado de seleção de membros
       const uniqueMembers = Array.from(new Set(metricsWithMemberNames.map((item) => item.member || "Desconhecido")))
+      console.log(`Membros únicos encontrados: ${uniqueMembers.join(", ")}`)
 
       // Manter as seleções existentes, mas adicionar novos membros
       setSelectedMembers((prev) => {
@@ -163,7 +185,7 @@ export default function GraficosPage() {
     const endDate = format(dateRange.to, "yyyy-MM-dd")
 
     setIsLoading(true)
-    getMetrics(startDate, endDate, "suporte")
+    getMetrics(startDate, endDate)
       .then((metricsData) => {
         // Adicionar nome do membro a cada métrica
         const metricsWithMemberNames = metricsData.map((metric) => {

@@ -43,8 +43,9 @@ export default function VisaoGeralPage() {
           break
       }
 
-      // Buscar métricas gerais (sem filtrar por service_type)
-      const metricsData = await getMetrics(startDate, endDate)
+      // Buscar métricas específicas de suporte
+      const metricsData = await getMetrics(startDate, endDate, "suporte")
+      console.log(`Fetched ${metricsData.length} metrics for support dashboard`)
       setMetrics(metricsData)
 
       // Se você tiver implementado getSupportMetrics, atualize também

@@ -114,6 +114,8 @@ export default function SuporteMetricsPage() {
     })
   }
 
+  // No método onSubmitSupport, vamos adicionar logs para debug e garantir que a data esteja sendo tratada corretamente
+
   const onSubmitSupport = async (data: SupportFormValues) => {
     setIsSubmitting(true)
 
@@ -144,12 +146,14 @@ export default function SuporteMetricsPage() {
       console.log("Enviando dados calculados para Supabase:", metricsData)
 
       // Inserir os dados calculados na tabela metrics
-      const { error } = await supabase.from("metrics").insert([metricsData])
+      const { data: insertedData, error } = await supabase.from("metrics").insert([metricsData]).select()
 
       if (error) {
         console.error("Insert error:", error)
         throw new Error(`Erro ao inserir dados: ${error.message}`)
       }
+
+      console.log("Dados inseridos com sucesso:", insertedData)
 
       const member = members.find((m) => m.id === data.member_id)
       toast({

@@ -68,19 +68,30 @@ export async function createMember(member: Omit<Member, "id" | "joined_at" | "cr
 }
 
 // Metrics
+// Vamos modificar a função getMetrics para garantir que ela busque corretamente as métricas, incluindo as do dia 29/04
+
+// Na função getMetrics, vamos adicionar logs para debug e garantir que as datas estejam sendo tratadas corretamente
 export async function getMetrics(startDate?: string, endDate?: string): Promise<MetricEntry[]> {
   try {
     const supabase = getSupabase()
+    console.log(`Buscando métricas de ${startDate || "início"} até ${endDate || "hoje"}`)
 
     // Primeiro, buscar as métricas
     let query = supabase.from("metrics").select("*").order("date", { ascending: false })
 
     if (startDate) {
       query = query.gte("date", startDate)
+      console.log(`Filtrando métricas a partir de ${startDate}`)
     }
 
     if (endDate) {
-      query = query.lte("date", endDate)
+      // Adicionar um dia ao endDate para incluir o próprio dia na consulta
+      const nextDay = new Date(endDate)
+      nextDay.setDate(nextDay.getDate() + 1)
+      const adjustedEndDate = nextDay.toISOString().split("T")[0]
+
+      query = query.lt("date", adjustedEndDate)
+      console.log(`Filtrando métricas até ${endDate} (ajustado para ${adjustedEndDate})`)
     }
 
     const { data: metricsData, error: metricsError } = await query
@@ -92,8 +103,14 @@ export async function getMetrics(startDate?: string, endDate?: string): Promise<
 
     // Se não temos métricas, retornar array vazio
     if (!metricsData || metricsData.length === 0) {
+      console.log("Nenhuma métrica encontrada para o período especificado")
       return []
     }
+
+    console.log(
+      `Encontradas ${metricsData.length} métricas. Primeiras datas:`,
+      metricsData.slice(0, 5).map((m) => m.date),
+    )
 
     // Buscar todos os membros para mapear IDs para nomes
     const { data: membersData, error: membersError } = await supabase.from("members").select("id, name")

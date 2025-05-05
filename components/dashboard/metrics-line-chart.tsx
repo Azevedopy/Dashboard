@@ -71,21 +71,45 @@ export function MetricsLineChart({
 
   // Processar dados para o gráfico
   const processedData = metrics
-    .map((item) => ({
-      date: item.date,
-      value: item[metricType] || 0,
-      member: item.member || "Desconhecido",
-      memberId: item.member_id || "unknown",
-    }))
+    .map((item) => {
+      // Verificar se a data é válida
+      let dateObj
+      try {
+        dateObj = new Date(item.date)
+        // Verificar se a data é válida
+        if (isNaN(dateObj.getTime())) {
+          console.error(`Data inválida: ${item.date}`)
+          return null
+        }
+      } catch (error) {
+        console.error(`Erro ao processar data: ${item.date}`, error)
+        return null
+      }
+
+      return {
+        date: item.date,
+        value: item[metricType] || 0,
+        member: item.member || "Desconhecido",
+        memberId: item.member_id || "unknown",
+        // Usar a data original para ordenação
+        dateObj: dateObj,
+      }
+    })
+    .filter(Boolean) // Remover itens nulos
     .sort((a, b) => {
-      const dateA = new Date(a.date)
-      const dateB = new Date(b.date)
-      return dateA.getTime() - dateB.getTime()
+      return a.dateObj.getTime() - b.dateObj.getTime()
     })
     .map((item) => ({
       ...item,
-      formattedDate: format(new Date(item.date), "dd/MM"),
+      formattedDate: format(item.dateObj, "dd/MM"),
     }))
+
+  // Adicionar log para debug
+  console.log(`Dados processados para o gráfico: ${processedData.length} itens`)
+  if (processedData.length > 0) {
+    console.log(`Primeiro item: ${JSON.stringify(processedData[0])}`)
+    console.log(`Último item: ${JSON.stringify(processedData[processedData.length - 1])}`)
+  }
 
   // Agrupar por data para criar a estrutura do gráfico
   const dateGroups = processedData.reduce((acc, item) => {
