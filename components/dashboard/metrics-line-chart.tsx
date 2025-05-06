@@ -85,13 +85,25 @@ export function MetricsLineChart({
           return null
         }
 
+        // Usar o valor exato do banco de dados sem transformações
+        const metricValue = Number(item[metricType]) || 0
+
+        // Log para debug
+        if (item.member === "Emerson" && metricType === "average_response_time") {
+          console.log(
+            `Dados do Emerson - Data: ${item.date}, Valor original: ${item[metricType]}, Valor usado: ${metricValue}`,
+          )
+        }
+
         return {
           date: item.date,
-          value: item[metricType] || 0,
+          value: metricValue,
           member: item.member || "Desconhecido",
           memberId: item.member_id || "unknown",
           // Usar a data sem ajustes de fuso horário
           dateObj: dateObj,
+          // Formatar a data no padrão brasileiro (dia/mês)
+          formattedDate: format(dateObj, "dd/MM", { locale: ptBR }),
         }
       } catch (error) {
         console.error(`Erro ao processar data: ${item.date}`, error)
@@ -102,11 +114,6 @@ export function MetricsLineChart({
     .sort((a, b) => {
       return a.dateObj.getTime() - b.dateObj.getTime()
     })
-    .map((item) => ({
-      ...item,
-      // Formatar a data no padrão brasileiro (dia/mês)
-      formattedDate: format(item.dateObj, "dd/MM", { locale: ptBR }),
-    }))
 
   // Adicionar log para debug
   console.log(`Dados processados para o gráfico: ${processedData.length} itens`)
@@ -115,40 +122,38 @@ export function MetricsLineChart({
     console.log(`Último item: ${JSON.stringify(processedData[processedData.length - 1])}`)
   }
 
-  // Agrupar por data para criar a estrutura do gráfico
-  const dateGroups = processedData.reduce((acc, item) => {
-    if (!acc[item.formattedDate]) {
-      acc[item.formattedDate] = {
-        date: item.formattedDate,
-        members: {},
-      }
+  // IMPORTANTE: Não calcular média para o mesmo dia/membro
+  // Em vez disso, criar um objeto onde cada combinação de data+membro tem seu próprio valor
+  const chartData = processedData.reduce((acc, item) => {
+    // Criar uma chave única para cada combinação de data e membro
+    const dateKey = item.formattedDate
+
+    // Se esta data ainda não existe no acumulador, criar um novo objeto para ela
+    if (!acc[dateKey]) {
+      acc[dateKey] = { date: dateKey }
     }
 
-    // Armazenar o valor para cada membro nesta data
-    if (!acc[item.formattedDate].members[item.member]) {
-      acc[item.formattedDate].members[item.member] = {
-        total: item.value,
-        count: 1,
-      }
-    } else {
-      acc[item.formattedDate].members[item.member].total += item.value
-      acc[item.formattedDate].members[item.member].count += 1
-    }
+    // Adicionar o valor diretamente para este membro nesta data
+    // Sem calcular média, usar o valor exato
+    acc[dateKey][item.member] = item.value
 
     return acc
   }, {})
 
-  // Converter para o formato esperado pelo Recharts
-  const chartData = Object.values(dateGroups).map((group: any) => {
-    const result: any = { date: group.date }
+  // Converter o objeto para um array para o Recharts
+  const finalChartData = Object.values(chartData)
 
-    // Calcular a média para cada membro nesta data
-    Object.entries(group.members).forEach(([member, data]: [string, any]) => {
-      result[member] = data.total / data.count
+  // Log para debug dos dados finais
+  console.log("Dados finais para o gráfico:", finalChartData)
+
+  // Verificar especificamente os dados do Emerson
+  if (metricType === "average_response_time") {
+    finalChartData.forEach((dataPoint: any) => {
+      if (dataPoint.Emerson !== undefined) {
+        console.log(`Valor final do Emerson em ${dataPoint.date}: ${dataPoint.Emerson}`)
+      }
     })
-
-    return result
-  })
+  }
 
   // Obter a lista única de membros para criar as linhas
   const uniqueMembers = Array.from(new Set(processedData.map((item) => item.member))).filter(Boolean)
@@ -240,7 +245,7 @@ export function MetricsLineChart({
   return (
     <div ref={containerRef} className="w-full h-full">
       <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 20 }}>
+        <LineChart data={finalChartData} margin={{ top: 10, right: 30, left: 0, bottom: 20 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
           <XAxis dataKey="date" stroke="#6b7280" tick={{ fill: "#6b7280" }} />
           <YAxis

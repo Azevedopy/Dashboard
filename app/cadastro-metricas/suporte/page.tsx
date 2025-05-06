@@ -25,7 +25,7 @@ const supportFormSchema = z.object({
   date: z.string().min(1, { message: "Selecione uma data" }),
   chats_abertos: z.coerce.number().min(0, { message: "Valor deve ser positivo" }).default(0),
   chats_finalizados: z.coerce.number().min(0, { message: "Valor deve ser positivo" }).default(0),
-  tempo_atendimento: z.string().default("00:00:00"),
+  tempo_atendimento: z.string().default("00:00"),
   csat_score: z.string().optional().default(""),
   evaluated_percentage: z.string().optional().default(""),
 })
@@ -49,7 +49,7 @@ export default function SuporteMetricsPage() {
       date: format(new Date(), "yyyy-MM-dd"),
       chats_abertos: 0,
       chats_finalizados: 0,
-      tempo_atendimento: "00:00:00",
+      tempo_atendimento: "00:00",
       csat_score: "",
       evaluated_percentage: "",
     },
@@ -82,18 +82,30 @@ export default function SuporteMetricsPage() {
     fetchMembers()
   }, [])
 
-  // Função para converter tempo (hh:mm:ss) para minutos
+  // Função para converter tempo (HH:mm) para minutos inteiros
   const convertTimeToMinutes = (timeString: string): number => {
-    if (!timeString || timeString === "00:00:00") return 0
+    if (!timeString || timeString === "00:00") return 0
 
-    // Verificar se o formato é hh:mm:ss ou apenas hh:mm
+    // Verificar se o formato é HH:mm
     const parts = timeString.split(":")
 
-    const hours = parts.length > 0 ? Number.parseInt(parts[0], 10) || 0 : 0
-    const minutes = parts.length > 1 ? Number.parseInt(parts[1], 10) || 0 : 0
-    const seconds = parts.length > 2 ? Number.parseInt(parts[2], 10) || 0 : 0
+    if (parts.length < 2) {
+      // Se for apenas um número, assumir que já está em minutos
+      const possibleMinutes = Number.parseInt(timeString, 10)
+      if (!isNaN(possibleMinutes)) {
+        console.log(`Valor interpretado como minutos: ${timeString} -> ${possibleMinutes} minutos`)
+        return possibleMinutes
+      }
+      return 0
+    }
 
-    return hours * 60 + minutes + seconds / 60
+    const hours = Number.parseInt(parts[0], 10) || 0
+    const minutes = Number.parseInt(parts[1], 10) || 0
+
+    // Converter para minutos inteiros
+    const totalMinutes = Math.round(hours * 60 + minutes)
+    console.log(`Tempo convertido: ${timeString} -> ${totalMinutes} minutos (${hours}h ${minutes}m)`)
+    return totalMinutes
   }
 
   // Função para converter string para número ou retornar 0 se vazio
@@ -134,8 +146,11 @@ export default function SuporteMetricsPage() {
       console.log(`Data original inserida: ${data.date}`)
       console.log(`Data que será salva no banco: ${formattedDate}`)
 
-      // Converter tempo de atendimento para minutos
+      // Converter tempo de atendimento para minutos inteiros
       const tempoTotalMinutos = convertTimeToMinutes(data.tempo_atendimento)
+      console.log(
+        `Tempo de atendimento original: ${data.tempo_atendimento}, convertido para minutos: ${tempoTotalMinutos}`,
+      )
 
       // Calcular a taxa de resolução
       const chatsAbertos = data.chats_abertos || 0
@@ -147,7 +162,7 @@ export default function SuporteMetricsPage() {
 
       // Formatar valores com 2 casas decimais
       const formattedResolutionRate = formatDecimal(taxaResolucao)
-      const formattedAverageResponseTime = formatDecimal(tempoMedio)
+      const formattedAverageResponseTime = Math.round(tempoMedio) // Arredonda para inteiro
       const formattedCsatScore = formatDecimal(parseNumberOrZero(data.csat_score))
       const formattedEvaluatedPercentage = formatDecimal(parseNumberOrZero(data.evaluated_percentage))
 
@@ -159,7 +174,7 @@ export default function SuporteMetricsPage() {
         member_id: data.member_id,
         date: formattedDate,
         resolution_rate: formattedResolutionRate,
-        average_response_time: formattedAverageResponseTime,
+        average_response_time: formattedAverageResponseTime, // Agora é um inteiro
         csat_score: formattedCsatScore,
         evaluated_percentage: formattedEvaluatedPercentage,
         open_tickets: chatsAbertos,
@@ -191,7 +206,7 @@ export default function SuporteMetricsPage() {
         date,
         chats_abertos: 0,
         chats_finalizados: 0,
-        tempo_atendimento: "00:00:00",
+        tempo_atendimento: "00:00",
         csat_score: "",
         evaluated_percentage: "",
       })
@@ -335,11 +350,11 @@ export default function SuporteMetricsPage() {
                         <FormItem>
                           <FormLabel>Tempo de Atendimento</FormLabel>
                           <FormControl>
-                            <Input type="text" placeholder="00:51:00" {...field} />
+                            <Input type="time" placeholder="01:30" {...field} />
                           </FormControl>
                           <FormMessage />
                           <p className="text-xs text-muted-foreground">
-                            Formato: hh:mm:ss (ex: 00:51:00 para 51 minutos)
+                            Formato: HH:mm (ex: 01:30 para 1 hora e 30 minutos = 90 minutos)
                           </p>
                         </FormItem>
                       )}

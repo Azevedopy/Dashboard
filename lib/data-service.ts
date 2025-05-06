@@ -74,6 +74,8 @@ export async function createMember(member: Omit<Member, "id" | "joined_at" | "cr
 }
 
 // Metrics
+// Adicionar logs específicos na função getMetrics
+
 export async function getMetrics(startDate?: string, endDate?: string): Promise<MetricEntry[]> {
   try {
     const supabase = getSupabase()
@@ -112,6 +114,17 @@ export async function getMetrics(startDate?: string, endDate?: string): Promise<
 
     console.log(`Encontradas ${metricsData.length} métricas. Datas:`, metricsData.map((m) => m.date).sort())
 
+    // Log para verificar os dados brutos do Emerson
+    const emersonMetrics = metricsData.filter((m) => {
+      // Verificar se o member_id corresponde ao Emerson
+      // Isso depende de como os IDs estão estruturados no seu banco
+      return m.member_id && (m.member_id.includes("Emerson") || m.member_id === "emerson-id")
+    })
+
+    if (emersonMetrics.length > 0) {
+      console.log("Dados brutos do Emerson do Supabase:", emersonMetrics)
+    }
+
     // Buscar todos os membros para mapear IDs para nomes
     const { data: membersData, error: membersError } = await supabase.from("members").select("id, name")
 
@@ -127,16 +140,41 @@ export async function getMetrics(startDate?: string, endDate?: string): Promise<
       memberMap.set(member.id, member.name)
     })
 
-    // Adicionar nomes de membros às métricas
-    const processedData = metricsData.map((metric) => ({
-      ...metric,
-      member: memberMap.get(metric.member_id) || "Desconhecido",
-      // Manter a data exatamente como está no banco
-      date: metric.date,
-    }))
+    // Adicionar nomes de membros às métricas sem modificar os valores numéricos
+    const processedData = metricsData.map((metric) => {
+      const memberName = memberMap.get(metric.member_id) || "Desconhecido"
+
+      // IMPORTANTE: Não modificar os valores numéricos aqui
+      // Manter os valores exatamente como vieram do banco de dados
+
+      // Log para verificar os dados do Emerson
+      if (memberName === "Emerson") {
+        console.log(`Métrica do Emerson - Data: ${metric.date}, Tempo médio: ${metric.average_response_time}`)
+      }
+
+      return {
+        ...metric,
+        member: memberName,
+        // Manter a data exatamente como está no banco
+        date: metric.date,
+        // Manter os valores numéricos exatamente como estão
+        average_response_time: metric.average_response_time,
+        resolution_rate: metric.resolution_rate,
+        csat_score: metric.csat_score,
+        evaluated_percentage: metric.evaluated_percentage,
+      }
+    })
 
     // Adicionar propriedades em camelCase para compatibilidade
-    return snakeToCamel(processedData)
+    const result = snakeToCamel(processedData)
+
+    // Log para verificar os dados finais do Emerson
+    const finalEmersonData = result.filter((m) => m.member === "Emerson")
+    if (finalEmersonData.length > 0) {
+      console.log("Dados finais do Emerson após processamento:", finalEmersonData)
+    }
+
+    return result
   } catch (error) {
     console.error("Unexpected error fetching metrics:", error)
     return []

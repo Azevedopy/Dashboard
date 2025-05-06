@@ -120,6 +120,19 @@ export default function GraficosPage() {
       const metricsData = await getMetrics(startDate, endDate)
       debugText += `Métricas recebidas: ${metricsData.length}\n`
 
+      // Adicionar log para verificar os dados do Emerson
+      const emersonMetrics = metricsData.filter((m) => {
+        const member = membersData.find((mem) => mem.id === m.member_id)
+        return member?.name === "Emerson"
+      })
+
+      if (emersonMetrics.length > 0) {
+        debugText += `\nMétricas do Emerson:\n`
+        emersonMetrics.forEach((m) => {
+          debugText += `Data: ${m.date}, Tempo médio: ${m.average_response_time}\n`
+        })
+      }
+
       // Adicionar nome do membro a cada métrica
       const metricsWithMemberNames = metricsData.map((metric) => {
         const member = membersData.find((m) => m.id === metric.member_id)
