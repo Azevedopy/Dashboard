@@ -36,6 +36,16 @@ const COLORS = [
   "#8764b8",
 ]
 
+// Função para formatar minutos para exibição
+const formatMinutes = (minutes: number): string => {
+  if (minutes >= 60) {
+    const hours = Math.floor(minutes / 60)
+    const mins = minutes % 60
+    return `${hours}h ${mins}min`
+  }
+  return `${minutes} min`
+}
+
 interface MetricsLineChartProps {
   metrics: any[]
   isLoading: boolean
@@ -88,13 +98,6 @@ export function MetricsLineChart({
         // Usar o valor exato do banco de dados sem transformações
         const metricValue = Number(item[metricType]) || 0
 
-        // Log para debug
-        if (item.member === "Emerson" && metricType === "average_response_time") {
-          console.log(
-            `Dados do Emerson - Data: ${item.date}, Valor original: ${item[metricType]}, Valor usado: ${metricValue}`,
-          )
-        }
-
         return {
           date: item.date,
           value: metricValue,
@@ -114,13 +117,6 @@ export function MetricsLineChart({
     .sort((a, b) => {
       return a.dateObj.getTime() - b.dateObj.getTime()
     })
-
-  // Adicionar log para debug
-  console.log(`Dados processados para o gráfico: ${processedData.length} itens`)
-  if (processedData.length > 0) {
-    console.log(`Primeiro item: ${JSON.stringify(processedData[0])}`)
-    console.log(`Último item: ${JSON.stringify(processedData[processedData.length - 1])}`)
-  }
 
   // IMPORTANTE: Não calcular média para o mesmo dia/membro
   // Em vez disso, criar um objeto onde cada combinação de data+membro tem seu próprio valor
@@ -142,18 +138,6 @@ export function MetricsLineChart({
 
   // Converter o objeto para um array para o Recharts
   const finalChartData = Object.values(chartData)
-
-  // Log para debug dos dados finais
-  console.log("Dados finais para o gráfico:", finalChartData)
-
-  // Verificar especificamente os dados do Emerson
-  if (metricType === "average_response_time") {
-    finalChartData.forEach((dataPoint: any) => {
-      if (dataPoint.Emerson !== undefined) {
-        console.log(`Valor final do Emerson em ${dataPoint.date}: ${dataPoint.Emerson}`)
-      }
-    })
-  }
 
   // Obter a lista única de membros para criar as linhas
   const uniqueMembers = Array.from(new Set(processedData.map((item) => item.member))).filter(Boolean)
@@ -235,9 +219,24 @@ export function MetricsLineChart({
     )
   }
 
+  // Personalizar formatadores com base no tipo de métrica
+  const customYAxisFormatter = (value: number) => {
+    if (metricType === "average_response_time") {
+      return formatMinutes(value)
+    }
+    return yAxisFormatter(value)
+  }
+
+  const customTooltipFormatter = (value: number, name: string) => {
+    if (metricType === "average_response_time") {
+      return [formatMinutes(value), name]
+    }
+    return [tooltipFormatter(value), name]
+  }
+
   const metricName =
     metricType === "average_response_time"
-      ? "Tempo Médio (min)"
+      ? "Tempo de Atendimento"
       : metricType === "resolution_rate"
         ? "Taxa de Resolução (%)"
         : metricType
@@ -251,11 +250,11 @@ export function MetricsLineChart({
           <YAxis
             stroke="#6b7280"
             tick={{ fill: "#6b7280" }}
-            tickFormatter={yAxisFormatter}
+            tickFormatter={customYAxisFormatter}
             domain={domain || ["auto", "auto"]}
           />
           <Tooltip
-            formatter={(value, name) => [tooltipFormatter(value as number), name]}
+            formatter={customTooltipFormatter}
             contentStyle={{
               backgroundColor: "#fff",
               border: "1px solid #e5e7eb",

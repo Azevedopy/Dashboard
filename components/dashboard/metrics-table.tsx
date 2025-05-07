@@ -16,6 +16,16 @@ import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Skeleton } from "@/components/ui/skeleton"
 
+// Função para formatar minutos para exibição
+const formatMinutes = (minutes: number): string => {
+  if (minutes >= 60) {
+    const hours = Math.floor(minutes / 60)
+    const mins = minutes % 60
+    return `${hours}h ${mins}min`
+  }
+  return `${minutes} min`
+}
+
 export function MetricsTable({ metrics, isLoading }) {
   const [sorting, setSorting] = useState<SortingState>([{ id: "date", desc: true }])
 
@@ -60,8 +70,8 @@ export function MetricsTable({ metrics, isLoading }) {
     },
     {
       accessorKey: "average_response_time",
-      header: "Tempo Médio",
-      cell: ({ row }) => `${row.getValue("average_response_time")} min`,
+      header: "Tempo de Atendimento",
+      cell: ({ row }) => formatMinutes(row.getValue("average_response_time")),
     },
     {
       accessorKey: "csat_score",
