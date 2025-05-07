@@ -19,13 +19,16 @@ import { Toaster } from "@/components/ui/toaster"
 import { getSupabase } from "@/lib/supabase"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 
-// Form schema para métricas de suporte - simplificado para evitar erros de validação
+// Regex para validar o formato hh:mm:ss
+const timeFormatRegex = /^([0-9]{2}):([0-9]{2}):([0-9]{2})$/
+
+// Form schema para métricas de suporte com validação de formato de tempo
 const supportFormSchema = z.object({
   member_id: z.string().min(1, { message: "Selecione um atendente" }),
   date: z.string().min(1, { message: "Selecione uma data" }),
   chats_abertos: z.coerce.number().min(0, { message: "Valor deve ser positivo" }).default(0),
   chats_finalizados: z.coerce.number().min(0, { message: "Valor deve ser positivo" }).default(0),
-  tempo_atendimento: z.string().default("00:00"),
+  tempo_atendimento: z.string().default("00:00:00"),
   csat_score: z.string().optional().default(""),
   evaluated_percentage: z.string().optional().default(""),
 })
@@ -49,7 +52,7 @@ export default function SuporteMetricsPage() {
       date: format(new Date(), "yyyy-MM-dd"),
       chats_abertos: 0,
       chats_finalizados: 0,
-      tempo_atendimento: "00:00",
+      tempo_atendimento: "00:00:00",
       csat_score: "",
       evaluated_percentage: "",
     },
@@ -82,30 +85,50 @@ export default function SuporteMetricsPage() {
     fetchMembers()
   }, [])
 
-  // Função para converter tempo (HH:mm) para minutos inteiros
+  // Função para formatar o tempo no padrão hh:mm:ss
+  const formatTimeInput = (value: string): string => {
+    // Remover caracteres não numéricos, exceto ":"
+    let formatted = value.replace(/[^\d:]/g, "")
+
+    // Adicionar ":" automaticamente após 2 dígitos se não houver
+    if (formatted.length === 2 && !formatted.includes(":")) {
+      formatted += ":"
+    } else if (formatted.length === 5 && formatted.split(":").length === 2) {
+      formatted += ":"
+    }
+
+    // Limitar a 8 caracteres (hh:mm:ss)
+    if (formatted.length > 8) {
+      formatted = formatted.slice(0, 8)
+    }
+
+    return formatted
+  }
+
+  // Função para converter tempo (hh:mm:ss) para minutos decimais
   const convertTimeToMinutes = (timeString: string): number => {
-    if (!timeString || timeString === "00:00") return 0
+    if (!timeString || timeString === "00:00:00") return 0
 
-    // Verificar se o formato é HH:mm
-    const parts = timeString.split(":")
+    // Verificar se o formato é hh:mm:ss
+    const match = timeString.match(timeFormatRegex)
 
-    if (parts.length < 2) {
-      // Se for apenas um número, assumir que já está em minutos
-      const possibleMinutes = Number.parseInt(timeString, 10)
-      if (!isNaN(possibleMinutes)) {
-        console.log(`Valor interpretado como minutos: ${timeString} -> ${possibleMinutes} minutos`)
-        return possibleMinutes
-      }
+    if (!match) {
+      console.error(`Formato de tempo inválido: ${timeString}`)
       return 0
     }
 
-    const hours = Number.parseInt(parts[0], 10) || 0
-    const minutes = Number.parseInt(parts[1], 10) || 0
+    const hours = Number.parseInt(match[1], 10) || 0
+    const minutes = Number.parseInt(match[2], 10) || 0
+    const seconds = Number.parseInt(match[3], 10) || 0
 
-    // Converter para minutos inteiros
-    const totalMinutes = Math.round(hours * 60 + minutes)
-    console.log(`Tempo convertido: ${timeString} -> ${totalMinutes} minutos (${hours}h ${minutes}m)`)
-    return totalMinutes
+    // Converter para minutos decimais (horas * 60 + minutos + segundos / 60)
+    const totalMinutes = hours * 60 + minutes + seconds / 60
+
+    // Arredondar para 1 casa decimal para evitar problemas de precisão
+    const roundedMinutes = Number.parseFloat(totalMinutes.toFixed(1))
+
+    console.log(`Tempo convertido: ${timeString} -> ${roundedMinutes} minutos (${hours}h ${minutes}m ${seconds}s)`)
+    return roundedMinutes
   }
 
   // Função para converter string para número ou retornar 0 se vazio
@@ -138,6 +161,11 @@ export default function SuporteMetricsPage() {
     setIsSubmitting(true)
 
     try {
+      // Validar o formato do tempo antes de prosseguir
+      if (!data.tempo_atendimento.match(timeFormatRegex)) {
+        throw new Error("Formato de tempo inválido. Use o formato hh:mm:ss (ex: 01:24:00)")
+      }
+
       const supabase = getSupabase()
 
       // IMPORTANTE: Usar a data exatamente como foi inserida, sem ajustes de fuso horário
@@ -146,7 +174,7 @@ export default function SuporteMetricsPage() {
       console.log(`Data original inserida: ${data.date}`)
       console.log(`Data que será salva no banco: ${formattedDate}`)
 
-      // Converter tempo de atendimento para minutos inteiros
+      // Converter tempo de atendimento para minutos decimais
       const tempoTotalMinutos = convertTimeToMinutes(data.tempo_atendimento)
       console.log(
         `Tempo de atendimento original: ${data.tempo_atendimento}, convertido para minutos: ${tempoTotalMinutos}`,
@@ -162,7 +190,7 @@ export default function SuporteMetricsPage() {
 
       // Formatar valores com 2 casas decimais
       const formattedResolutionRate = formatDecimal(taxaResolucao)
-      const formattedAverageResponseTime = Math.round(tempoMedio) // Arredonda para inteiro
+      const formattedAverageResponseTime = formatDecimal(tempoMedio) // Mantém 2 casas decimais
       const formattedCsatScore = formatDecimal(parseNumberOrZero(data.csat_score))
       const formattedEvaluatedPercentage = formatDecimal(parseNumberOrZero(data.evaluated_percentage))
 
@@ -174,7 +202,7 @@ export default function SuporteMetricsPage() {
         member_id: data.member_id,
         date: formattedDate,
         resolution_rate: formattedResolutionRate,
-        average_response_time: formattedAverageResponseTime, // Agora é um inteiro
+        average_response_time: formattedAverageResponseTime, // Agora é um decimal com 2 casas
         csat_score: formattedCsatScore,
         evaluated_percentage: formattedEvaluatedPercentage,
         open_tickets: chatsAbertos,
@@ -206,7 +234,7 @@ export default function SuporteMetricsPage() {
         date,
         chats_abertos: 0,
         chats_finalizados: 0,
-        tempo_atendimento: "00:00",
+        tempo_atendimento: "00:00:00",
         csat_score: "",
         evaluated_percentage: "",
       })
@@ -287,14 +315,7 @@ export default function SuporteMetricsPage() {
                         <FormItem>
                           <FormLabel>Data</FormLabel>
                           <FormControl>
-                            <Input
-                              type="date"
-                              {...field}
-                              onChange={(e) => {
-                                field.onChange(e)
-                                console.log("Data selecionada:", e.target.value)
-                              }}
-                            />
+                            <Input type="date" {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -311,10 +332,11 @@ export default function SuporteMetricsPage() {
                             <Input
                               type="number"
                               min="0"
-                              {...field}
-                              onChange={(e) =>
-                                field.onChange(e.target.value === "" ? 0 : Number.parseInt(e.target.value, 10))
-                              }
+                              value={field.value}
+                              onChange={(e) => {
+                                const value = e.target.value === "" ? "0" : e.target.value
+                                field.onChange(Number.parseInt(value, 10))
+                              }}
                             />
                           </FormControl>
                           <FormMessage />
@@ -332,10 +354,11 @@ export default function SuporteMetricsPage() {
                             <Input
                               type="number"
                               min="0"
-                              {...field}
-                              onChange={(e) =>
-                                field.onChange(e.target.value === "" ? 0 : Number.parseInt(e.target.value, 10))
-                              }
+                              value={field.value}
+                              onChange={(e) => {
+                                const value = e.target.value === "" ? "0" : e.target.value
+                                field.onChange(Number.parseInt(value, 10))
+                              }}
                             />
                           </FormControl>
                           <FormMessage />
@@ -350,11 +373,21 @@ export default function SuporteMetricsPage() {
                         <FormItem>
                           <FormLabel>Tempo de Atendimento</FormLabel>
                           <FormControl>
-                            <Input type="time" placeholder="01:30" {...field} />
+                            <Input
+                              type="text"
+                              placeholder="00:00:00"
+                              value={field.value}
+                              onChange={(e) => {
+                                // Usar a função de formatação e passar o resultado para o field.onChange
+                                const formattedValue = formatTimeInput(e.target.value)
+                                field.onChange(formattedValue)
+                              }}
+                            />
                           </FormControl>
                           <FormMessage />
                           <p className="text-xs text-muted-foreground">
-                            Formato: HH:mm (ex: 01:30 para 1 hora e 30 minutos = 90 minutos)
+                            Formato: hh:mm:ss (ex: 01:24:00 para 1h24m = 84 minutos, 00:24:30 para 24m30s = 24.5
+                            minutos)
                           </p>
                         </FormItem>
                       )}
@@ -367,7 +400,12 @@ export default function SuporteMetricsPage() {
                         <FormItem>
                           <FormLabel>Média CSAT (0-5)</FormLabel>
                           <FormControl>
-                            <Input type="text" placeholder="Ex: 4.5" {...field} />
+                            <Input
+                              type="text"
+                              placeholder="Ex: 4.5"
+                              value={field.value}
+                              onChange={(e) => field.onChange(e.target.value)}
+                            />
                           </FormControl>
                           <FormMessage />
                           <p className="text-xs text-muted-foreground">
@@ -384,7 +422,12 @@ export default function SuporteMetricsPage() {
                         <FormItem>
                           <FormLabel>% de Atendimentos Avaliados</FormLabel>
                           <FormControl>
-                            <Input type="text" placeholder="Ex: 75.5" {...field} />
+                            <Input
+                              type="text"
+                              placeholder="Ex: 75.5"
+                              value={field.value}
+                              onChange={(e) => field.onChange(e.target.value)}
+                            />
                           </FormControl>
                           <FormMessage />
                           <p className="text-xs text-muted-foreground">
