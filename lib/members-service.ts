@@ -7,7 +7,7 @@ export async function getMembers(): Promise<Member[]> {
     const supabase = getSupabase()
     const { data, error } = await supabase
       .from("members")
-      .select("id, name, email, role, joined_at, created_at, avatar_url, access_type")
+      .select("id, name, email, role, joined_at, created_at, avatar_url, access_type, service_type")
       .order("name")
 
     if (error) {
@@ -28,7 +28,7 @@ export async function getMemberById(id: string): Promise<Member | null> {
     const supabase = getSupabase()
     const { data, error } = await supabase
       .from("members")
-      .select("id, name, email, role, joined_at, created_at, avatar_url, access_type")
+      .select("id, name, email, role, joined_at, created_at, avatar_url, access_type, service_type")
       .eq("id", id)
       .single()
 
@@ -131,7 +131,7 @@ export async function getMembersByRole(role: string): Promise<Member[]> {
     const supabase = getSupabase()
     const { data, error } = await supabase
       .from("members")
-      .select("id, name, email, role, joined_at, created_at, avatar_url, access_type")
+      .select("id, name, email, role, joined_at, created_at, avatar_url, access_type, service_type")
       .eq("role", role)
       .order("name")
 
@@ -211,5 +211,28 @@ export async function updateMemberPassword(id: string, password: string): Promis
   } catch (error) {
     console.error(`Unexpected error updating password for member with id ${id}:`, error)
     return false
+  }
+}
+
+// Buscar membros por tipo de serviço
+export async function getMembersByService(serviceType: string): Promise<Member[]> {
+  try {
+    const supabase = getSupabase()
+    const { data, error } = await supabase
+      .from("members")
+      .select("id, name, email, role, joined_at, created_at, avatar_url, access_type, service_type")
+      .eq("service_type", serviceType)
+      .order("name")
+
+    if (error) {
+      console.error(`Error fetching members with service type ${serviceType}:`, error)
+      throw new Error(`Error fetching members with service type ${serviceType}: ${error.message}`)
+    }
+
+    console.log(`Found ${data?.length || 0} members with service_type=${serviceType}`)
+    return data || []
+  } catch (error) {
+    console.error(`Unexpected error fetching members with service type ${serviceType}:`, error)
+    throw error
   }
 }

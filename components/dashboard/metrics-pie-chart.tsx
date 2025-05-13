@@ -66,6 +66,7 @@ export function MetricsPieChart({ metrics, isLoading, metricType, onMemberToggle
   const chartData = Object.values(processedData).map((item: any) => ({
     name: item.name,
     value: item.total / item.count,
+    rawValue: item.total / item.count, // Manter o valor bruto para cálculos
   }))
 
   // Ordenar os dados do maior para o menor valor
@@ -99,6 +100,35 @@ export function MetricsPieChart({ metrics, isLoading, metricType, onMemberToggle
     }
   }
 
+  // Formatação específica para cada tipo de métrica
+  const getFormattedValue = (value: number) => {
+    switch (metricType) {
+      case "average_response_time":
+        return `${value.toFixed(1)} min`
+      case "resolution_rate":
+      case "evaluated_percentage":
+        return `${value.toFixed(1)}%`
+      case "csat_score":
+        return value.toFixed(1)
+      default:
+        return value.toFixed(0)
+    }
+  }
+
+  // Calcular o total para percentuais
+  const total = chartData.reduce((sum, entry) => sum + entry.value, 0)
+
+  // Preparar dados para o gráfico com percentuais
+  const pieData = chartData.map((entry) => {
+    const percentage = (entry.value / total) * 100
+    return {
+      ...entry,
+      percentage,
+      // Para o gráfico, usamos o percentual como valor
+      value: percentage,
+    }
+  })
+
   // Componente personalizado para a legenda clicável
   const CustomLegend = () => {
     if (chartData.length === 0) {
@@ -107,27 +137,29 @@ export function MetricsPieChart({ metrics, isLoading, metricType, onMemberToggle
 
     return (
       <ul className="flex flex-col gap-2 mt-4">
-        {chartData.map((entry, index) => (
-          <li
-            key={`item-${index}`}
-            className="flex items-center cursor-pointer"
-            onClick={() => toggleMemberVisibility(entry.name)}
-          >
-            <div
-              className="w-3 h-3 mr-2 rounded-full"
-              style={{
-                backgroundColor: COLORS[index % COLORS.length],
-              }}
-            />
-            <span
-              style={{
-                color: "#6b7280",
-              }}
+        {pieData.map((entry, index) => {
+          return (
+            <li
+              key={`item-${index}`}
+              className="flex items-center cursor-pointer"
+              onClick={() => toggleMemberVisibility(entry.name)}
             >
-              {entry.name}: {getTooltipFormatter(entry.value)}
-            </span>
-          </li>
-        ))}
+              <div
+                className="w-3 h-3 mr-2 rounded-full"
+                style={{
+                  backgroundColor: COLORS[index % COLORS.length],
+                }}
+              />
+              <span
+                style={{
+                  color: "#6b7280",
+                }}
+              >
+                {entry.name}: {getFormattedValue(entry.rawValue)} ({entry.percentage.toFixed(1)}%)
+              </span>
+            </li>
+          )
+        })}
       </ul>
     )
   }
@@ -148,21 +180,6 @@ export function MetricsPieChart({ metrics, isLoading, metricType, onMemberToggle
     )
   }
 
-  // Formatação específica para cada tipo de métrica
-  const getTooltipFormatter = (value: number) => {
-    switch (metricType) {
-      case "average_response_time":
-        return `${value.toFixed(1)} min`
-      case "resolution_rate":
-      case "evaluated_percentage":
-        return `${value.toFixed(1)}%`
-      case "csat_score":
-        return value.toFixed(1)
-      default:
-        return value.toFixed(0)
-    }
-  }
-
   const getMetricLabel = () => {
     switch (metricType) {
       case "average_response_time":
@@ -173,8 +190,6 @@ export function MetricsPieChart({ metrics, isLoading, metricType, onMemberToggle
         return "% Avaliados"
       case "csat_score":
         return "CSAT"
-      case "resolved_tickets":
-        return "Tickets Resolvidos"
       default:
         return metricType
     }
@@ -186,9 +201,9 @@ export function MetricsPieChart({ metrics, isLoading, metricType, onMemberToggle
         <div className="col-span-2">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
-              {chartData.length > 0 && (
+              {pieData.length > 0 && (
                 <Pie
-                  data={chartData}
+                  data={pieData}
                   cx="50%"
                   cy="50%"
                   labelLine={true}
@@ -196,15 +211,25 @@ export function MetricsPieChart({ metrics, isLoading, metricType, onMemberToggle
                   fill="#8884d8"
                   dataKey="value"
                   nameKey="name"
-                  label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                  label={({ name, value }) => `${name}: ${value.toFixed(0)}%`}
                 >
-                  {chartData.map((entry, index) => (
+                  {pieData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                   ))}
                 </Pie>
               )}
               <Tooltip
-                formatter={(value) => [getTooltipFormatter(value as number), getMetricLabel()]}
+                formatter={(value, name, props) => {
+                  // Obter o valor bruto do item original
+                  const originalItem = pieData.find((item) => item.name === name)
+                  const rawValue = originalItem ? originalItem.rawValue : 0
+
+                  // Formatar o valor de acordo com o tipo de métrica
+                  const formattedValue = getFormattedValue(rawValue)
+
+                  // Retornar tanto o valor formatado quanto o percentual
+                  return [`${formattedValue} (${value.toFixed(1)}%)`, getMetricLabel()]
+                }}
                 contentStyle={{
                   backgroundColor: "#fff",
                   border: "1px solid #e5e7eb",

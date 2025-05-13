@@ -26,10 +26,12 @@ export function ConsultoriaPieChart({ data, isLoading, groupByField, title }: Co
     if (!data || data.length === 0) return
 
     try {
+      console.log(`Processando dados para o gráfico ${title}, campo: ${groupByField}`, data)
+
       // Agrupar dados pelo campo especificado
       const groupedData = data.reduce((acc, item) => {
         // Garantir que o valor não seja undefined ou null
-        const key = item[groupByField] || "Não especificado"
+        const key = item[groupByField] ?? "Não especificado"
 
         if (!acc[key]) {
           acc[key] = 0
@@ -37,6 +39,8 @@ export function ConsultoriaPieChart({ data, isLoading, groupByField, title }: Co
         acc[key] += 1
         return acc
       }, {})
+
+      console.log(`Dados agrupados para ${title}:`, groupedData)
 
       // Preparar dados para o gráfico
       const labels = Object.keys(groupedData)
@@ -62,7 +66,7 @@ export function ConsultoriaPieChart({ data, isLoading, groupByField, title }: Co
         label: title,
         data: values,
         backgroundColor: backgroundColors.slice(0, labels.length),
-        borderColor: backgroundColors.slice(0, labels.length).map((color) => color.replace("0.7", "1")),
+        borderColor: backgroundColors.slice(0, labels.length).map((color) => color.replace("0.5", "1")),
         borderWidth: 1,
       }
 
@@ -136,6 +140,11 @@ export function ConsultoriaPieChart({ data, isLoading, groupByField, title }: Co
 
   if (!data || data.length === 0) {
     return <div className="flex items-center justify-center h-full">Nenhum dado disponível para exibição.</div>
+  }
+
+  // Verificar se chartData tem dados antes de renderizar
+  if (!chartData.labels.length) {
+    return <div className="flex items-center justify-center h-full">Processando dados...</div>
   }
 
   return <Pie options={options} data={chartData} />

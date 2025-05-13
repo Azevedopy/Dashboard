@@ -331,6 +331,72 @@ export async function createMetric(metricData: any): Promise<MetricEntry | null>
   }
 }
 
+// Função para atualizar uma métrica existente
+export async function updateMetric(id: string, metricData: any): Promise<MetricEntry | null> {
+  try {
+    const supabase = getSupabase()
+
+    // Formatar valores decimais para ter no máximo 2 casas decimais
+    const resolution_rate = formatDecimal(metricData.resolution_rate || 0)
+    const average_response_time = formatDecimal(metricData.average_response_time || 0)
+    const csat_score = formatDecimal(metricData.csat_score || 0)
+    const evaluated_percentage = formatDecimal(metricData.evaluated_percentage || 0)
+
+    // Usar snake_case para os nomes das colunas (formato do banco)
+    const data = {
+      resolution_rate: resolution_rate,
+      average_response_time: average_response_time,
+      csat_score: csat_score,
+      evaluated_percentage: evaluated_percentage,
+      open_tickets: metricData.open_tickets,
+      resolved_tickets: metricData.resolved_tickets,
+    }
+
+    console.log("Dados formatados para atualização:", data)
+
+    const { data: result, error } = await supabase.from("metrics").update(data).eq("id", id).select().single()
+
+    if (error) {
+      console.error("Error updating metric:", error)
+      return null
+    }
+
+    console.log("Métrica atualizada com sucesso:", result)
+
+    // Adicionar propriedades em camelCase para compatibilidade
+    return {
+      ...result,
+      resolutionRate: result.resolution_rate,
+      averageResponseTime: result.average_response_time,
+      csatScore: result.csat_score,
+      evaluatedPercentage: result.evaluated_percentage,
+      openTickets: result.open_tickets,
+      resolvedTickets: result.resolved_tickets,
+    }
+  } catch (error) {
+    console.error("Unexpected error updating metric:", error)
+    return null
+  }
+}
+
+// Função para excluir uma métrica
+export async function deleteMetric(id: string): Promise<boolean> {
+  try {
+    const supabase = getSupabase()
+    const { error } = await supabase.from("metrics").delete().eq("id", id)
+
+    if (error) {
+      console.error("Error deleting metric:", error)
+      return false
+    }
+
+    return true
+  } catch (error) {
+    console.error("Unexpected error deleting metric:", error)
+    return false
+  }
+}
+
 // Aggregated metrics
 export async function getAggregatedMetrics(startDate?: string, endDate?: string): Promise<DailyMetric[]> {
   try {

@@ -1,12 +1,12 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Clock, BarChart2, Star, CheckCircle, AlertCircle, CheckCheck } from "lucide-react"
+import { Clock, BarChart2, Star, CheckCircle } from "lucide-react"
 
 export function MetricsStats({ metrics, isLoading }) {
   if (isLoading) {
     return (
-      <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-        {Array(6)
+      <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-4">
+        {Array(4)
           .fill(0)
           .map((_, i) => (
             <Card key={i}>
@@ -27,7 +27,7 @@ export function MetricsStats({ metrics, isLoading }) {
 
   if (!metrics || !metrics.length) {
     return (
-      <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader>
             <CardTitle className="text-lg">Nenhum dado disponível</CardTitle>
@@ -44,11 +44,9 @@ export function MetricsStats({ metrics, isLoading }) {
   const avgCsatScore = metrics.reduce((sum, metric) => sum + (metric.csat_score || 0), 0) / metrics.length
   const avgEvaluatedPercentage =
     metrics.reduce((sum, metric) => sum + (metric.evaluated_percentage || 0), 0) / metrics.length
-  const totalOpenTickets = metrics.reduce((sum, metric) => sum + (metric.open_tickets || 0), 0)
-  const totalResolvedTickets = metrics.reduce((sum, metric) => sum + (metric.resolved_tickets || 0), 0)
 
   return (
-    <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+    <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-4">
       <Card>
         <CardHeader className="pb-2">
           <div className="text-sm text-muted-foreground">Taxa de Resolução</div>
@@ -97,32 +95,6 @@ export function MetricsStats({ metrics, isLoading }) {
           <div className="flex items-center text-muted-foreground">
             <CheckCircle className="mr-2 h-4 w-4" />
             <span className="text-sm">Média do período</span>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="pb-2">
-          <div className="text-sm text-muted-foreground">Atendimentos Abertos</div>
-          <CardTitle className="text-2xl">{totalOpenTickets}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center text-muted-foreground">
-            <AlertCircle className="mr-2 h-4 w-4" />
-            <span className="text-sm">Total do período</span>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="pb-2">
-          <div className="text-sm text-muted-foreground">Atendimentos Resolvidos</div>
-          <CardTitle className="text-2xl">{totalResolvedTickets}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center text-muted-foreground">
-            <CheckCheck className="mr-2 h-4 w-4" />
-            <span className="text-sm">Total do período</span>
           </div>
         </CardContent>
       </Card>

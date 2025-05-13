@@ -1,9 +1,9 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { format, subDays, parseISO, startOfMonth } from "date-fns"
+import { format, subDays, startOfMonth } from "date-fns"
 import { ptBR } from "date-fns/locale"
-import { CalendarIcon, RefreshCw, Filter, X, Info } from "lucide-react"
+import { CalendarIcon, RefreshCw, Filter, X, Info, Edit, Download } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -20,6 +20,8 @@ import { MetricsPieChart } from "@/components/dashboard/metrics-pie-chart"
 import { MetricsLineChart } from "@/components/dashboard/metrics-line-chart"
 import { toast } from "@/components/ui/use-toast"
 import { Toaster } from "@/components/ui/toaster"
+import { EditMetricDialog } from "@/components/metrics/edit-metric-dialog"
+import { exportToCSV } from "@/lib/export-utils"
 
 export default function GraficosPage() {
   const [isLoading, setIsLoading] = useState(true)
@@ -40,6 +42,11 @@ export default function GraficosPage() {
   const [selectedMembers, setSelectedMembers] = useState<Record<string, boolean>>({})
   const [isFilterOpen, setIsFilterOpen] = useState(false)
   const [filteredMetrics, setFilteredMetrics] = useState([])
+
+  // Estado para o gerenciamento de métricas
+  const [selectedMetricForEdit, setSelectedMetricForEdit] = useState(null)
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [isManageMode, setIsManageMode] = useState(false)
 
   useEffect(() => {
     fetchData()
@@ -241,7 +248,6 @@ export default function GraficosPage() {
     { value: "average_response_time", label: "Tempo Médio" },
     { value: "evaluated_percentage", label: "% Avaliados" },
     { value: "csat_score", label: "CSAT" },
-    { value: "resolved_tickets", label: "Tickets Resolvidos" },
   ]
 
   // Configurações específicas para cada tipo de métrica
@@ -290,6 +296,80 @@ export default function GraficosPage() {
   // Contar quantos atendentes estão selecionados
   const selectedCount = Object.values(selectedMembers).filter(Boolean).length
   const totalMembers = Object.keys(selectedMembers).length
+
+  // Funções para gerenciamento de métricas
+  const handleEditMetric = (metric) => {
+    setSelectedMetricForEdit(metric)
+    setIsEditDialogOpen(true)
+  }
+
+  const closeEditDialog = () => {
+    setIsEditDialogOpen(false)
+    setSelectedMetricForEdit(null)
+  }
+
+  const handleEditSuccess = () => {
+    fetchData()
+    toast({
+      title: "Métrica atualizada",
+      description: "A métrica foi atualizada com sucesso.",
+    })
+  }
+
+  const formatDate = (dateString) => {
+    try {
+      return format(new Date(dateString), "dd/MM/yyyy", { locale: ptBR })
+    } catch (error) {
+      return dateString
+    }
+  }
+
+  // Função para formatar tempo médio
+  const formatTime = (minutes) => {
+    if (minutes >= 60) {
+      const hours = Math.floor(minutes / 60)
+      const mins = minutes % 60
+      return `${hours}h ${mins}min`
+    }
+    return `${minutes} min`
+  }
+
+  // Função para exportar métricas
+  const handleExportMetrics = () => {
+    try {
+      if (!filteredMetrics.length) {
+        toast({
+          title: "Sem dados para exportar",
+          description: "Não há dados disponíveis para exportação.",
+          variant: "destructive",
+        })
+        return
+      }
+
+      const fileName = "metricas_suporte"
+      const result = exportToCSV(filteredMetrics, fileName)
+
+      if (result.success) {
+        toast({
+          title: "Exportação concluída",
+          description: result.message,
+        })
+      } else {
+        toast({
+          title: "Erro na exportação",
+          description: result.message,
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error("Error exporting data:", error)
+      toast({
+        title: "Erro na exportação",
+        description: "Não foi possível exportar os dados. Tente novamente.",
+        variant: "destructive",
+      })
+    }
+  }
 
   return (
     <div className="flex flex-col h-full">
@@ -529,38 +609,144 @@ export default function GraficosPage() {
           </CardContent>
         </Card>
 
-        {/* Exibir informações sobre as métricas carregadas */}
+        {/* Gerenciamento de métricas */}
         <Card>
-          <CardHeader>
-            <CardTitle>Informações sobre os dados</CardTitle>
-            <CardDescription>Total de métricas carregadas: {metrics.length}</CardDescription>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div>
+              <CardTitle>Gerenciamento de Métricas</CardTitle>
+              <CardDescription>Total de métricas carregadas: {metrics.length}</CardDescription>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setIsManageMode(!isManageMode)}
+                className={isManageMode ? "bg-gray-200" : ""}
+              >
+                <Edit className="mr-2 h-4 w-4" />
+                {isManageMode ? "Voltar" : "Gerenciar Métricas"}
+              </Button>
+              <Button variant="outline" onClick={handleExportMetrics} disabled={!metrics.length}>
+                <Download className="mr-2 h-4 w-4" />
+                Exportar
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="text-sm">
-              <p className="font-medium mb-2">Período selecionado:</p>
-              <p>
-                De {dateRange.from ? format(dateRange.from, "dd/MM/yyyy", { locale: ptBR }) : "N/A"} até{" "}
-                {dateRange.to ? format(dateRange.to, "dd/MM/yyyy", { locale: ptBR }) : "N/A"}
-              </p>
-
-              {metrics.length > 0 && (
-                <>
-                  <p className="font-medium mt-4 mb-2">Datas das métricas:</p>
-                  <div className="flex flex-wrap gap-1">
-                    {Array.from(new Set(metrics.map((m) => m.date)))
-                      .sort()
-                      .map((date) => (
-                        <Badge key={date} variant="outline" className="text-xs">
-                          {format(parseISO(date), "dd/MM/yyyy", { locale: ptBR })}
-                        </Badge>
-                      ))}
+            {isManageMode ? (
+              // Modo de gerenciamento de métricas
+              isLoading ? (
+                <div className="text-center py-8">Carregando métricas...</div>
+              ) : metrics.length === 0 ? (
+                <div className="text-center py-8">
+                  <p>Nenhuma métrica encontrada para os filtros selecionados.</p>
+                </div>
+              ) : (
+                <div className="rounded-md border">
+                  <div className="overflow-x-auto">
+                    <table className="w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th
+                            scope="col"
+                            className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                          >
+                            Data
+                          </th>
+                          <th
+                            scope="col"
+                            className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                          >
+                            Membro
+                          </th>
+                          <th
+                            scope="col"
+                            className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                          >
+                            Taxa de Resolução
+                          </th>
+                          <th
+                            scope="col"
+                            className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                          >
+                            Tempo Médio
+                          </th>
+                          <th
+                            scope="col"
+                            className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                          >
+                            CSAT
+                          </th>
+                          <th
+                            scope="col"
+                            className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                          >
+                            % Avaliados
+                          </th>
+                          <th
+                            scope="col"
+                            className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider"
+                          >
+                            Ações
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {filteredMetrics.map((metric) => (
+                          <tr key={metric.id} className="hover:bg-gray-50">
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                              {formatDate(metric.date)}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{metric.member}</td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {metric.resolution_rate}%
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {formatTime(metric.average_response_time)}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{metric.csat_score}</td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {metric.evaluated_percentage}%
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleEditMetric(metric)}
+                                title="Editar métrica"
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
-                </>
-              )}
-            </div>
+                </div>
+              )
+            ) : (
+              // Modo de visualização resumida
+              <div className="text-center py-8">
+                <p>Clique em "Gerenciar Métricas" para visualizar e editar as métricas disponíveis.</p>
+                <p className="text-sm text-muted-foreground mt-2">
+                  Período: {dateRange.from ? format(dateRange.from, "dd/MM/yyyy", { locale: ptBR }) : "N/A"} até{" "}
+                  {dateRange.to ? format(dateRange.to, "dd/MM/yyyy", { locale: ptBR }) : "N/A"}
+                </p>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
+
+      {selectedMetricForEdit && (
+        <EditMetricDialog
+          isOpen={isEditDialogOpen}
+          onClose={closeEditDialog}
+          metric={selectedMetricForEdit}
+          onSuccess={handleEditSuccess}
+        />
+      )}
+
       <Toaster />
     </div>
   )

@@ -13,30 +13,37 @@ export type DefaultPermission = {
 }
 
 // Tipos para membros
-export type Member = {
+export interface Member {
   id: string
   name: string
   email: string
   role: string
-  joined_at: string
-  created_at: string
+  joined_at?: string
+  created_at?: string
   avatar_url?: string
-  access_type: string
-  password?: string // Nota: geralmente não retornamos senhas em consultas
+  access_type?: string
+  service_type?: string
 }
 
-export type MetricEntry = {
-  id: string
-  member_id: string
+// Tipos para métricas
+export interface MetricEntry {
+  id?: string
   date: string
+  member_id: string
+  member_name?: string
   resolution_rate: number
   average_response_time: number
   csat_score: number
   evaluated_percentage: number
   open_tickets: number
   resolved_tickets: number
-  service_type?: string
-  member?: string
+  // Propriedades em camelCase para compatibilidade
+  resolutionRate?: number
+  averageResponseTime?: number
+  csatScore?: number
+  evaluatedPercentage?: number
+  openTickets?: number
+  resolvedTickets?: number
 }
 
 export type DailyMetric = {
@@ -173,4 +180,25 @@ export type SupportStats = {
   totalRevenue: number
   averageProjectDuration: number
   deadlineComplianceRate: number
+}
+
+// Tipos para métricas de consultoria
+export interface ConsultingMetric {
+  id?: string
+  date: string
+  member_id: string
+  consultor: string
+  client: string
+  project_type: string
+  status: string
+  size: string
+  size_detail: string
+  start_date: string
+  end_date: string
+  duration: number
+  closing_date?: string | null
+  turning_date?: string | null
+  consulting_value: number
+  bonus_8_percent: number
+  bonus_12_percent: number
 }
