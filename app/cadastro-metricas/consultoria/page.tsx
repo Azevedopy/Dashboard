@@ -212,17 +212,22 @@ export default function ConsultingMetricsForm() {
 
   return (
     <div className="container mx-auto py-6">
-      <div className="flex justify-between items-center mb-6">
+      <div className="p-6 bg-[#0056D6] text-white flex justify-between items-center mb-6">
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" onClick={() => router.back()}>
+          <Button variant="ghost" size="icon" onClick={() => router.back()} className="text-white hover:bg-white/20">
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div>
-            <h1 className="text-2xl font-bold">Cadastrar Projeto</h1>
-            <p className="text-sm text-muted-foreground">Adicione as informações do projeto de consultoria</p>
+            <h1 className="text-2xl font-bold text-white">Cadastrar Projeto</h1>
+            <p className="text-sm text-white/90">Adicione as informações do projeto de consultoria</p>
           </div>
         </div>
-        <Button type="submit" onClick={handleSubmit} disabled={isLoading} className="bg-blue-600 hover:bg-blue-700">
+        <Button
+          type="submit"
+          onClick={handleSubmit}
+          disabled={isLoading}
+          className="bg-white text-[#0056D6] hover:bg-white/90"
+        >
           <Save className="mr-2 h-4 w-4" />
           Salvar Alterações
         </Button>

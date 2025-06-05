@@ -113,9 +113,9 @@ export default function ConsultoriasConcluidasPage() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="p-6 border-b">
-        <h1 className="text-2xl font-bold">Consultorias Concluídas</h1>
-        <p className="text-sm text-muted-foreground">Visualize e analise todas as consultorias que foram concluídas.</p>
+      <div className="p-6 bg-[#0056D6] text-white">
+        <h1 className="text-2xl font-bold text-white">Consultorias Concluídas</h1>
+        <p className="text-sm text-white/90">Visualize e analise todas as consultorias que foram concluídas.</p>
       </div>
 
       <div className="p-6 space-y-6">

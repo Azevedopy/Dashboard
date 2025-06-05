@@ -166,14 +166,14 @@ export default function EditarProjetoSuportePage({ params }) {
   if (isLoading) {
     return (
       <div className="flex flex-col h-full">
-        <div className="p-6 border-b">
+        <div className="p-6 bg-[#0056D6] text-white">
           <div className="flex items-center">
-            <Button variant="ghost" onClick={() => router.back()} className="mr-4">
+            <Button variant="ghost" onClick={() => router.back()} className="mr-4 text-white hover:bg-white/20">
               <ArrowLeft className="h-4 w-4" />
             </Button>
             <div>
-              <h1 className="text-2xl font-bold">Carregando...</h1>
-              <p className="text-sm text-muted-foreground">Aguarde enquanto carregamos os dados do projeto</p>
+              <h1 className="text-2xl font-bold text-white">Carregando...</h1>
+              <p className="text-sm text-white/90">Aguarde enquanto carregamos os dados do projeto</p>
             </div>
           </div>
         </div>
@@ -188,14 +188,14 @@ export default function EditarProjetoSuportePage({ params }) {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="p-6 border-b">
+      <div className="p-6 bg-[#0056D6] text-white">
         <div className="flex items-center">
-          <Button variant="ghost" onClick={() => router.back()} className="mr-4">
+          <Button variant="ghost" onClick={() => router.back()} className="mr-4 text-white hover:bg-white/20">
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
-            <h1 className="text-2xl font-bold">Editar Projeto de Suporte</h1>
-            <p className="text-sm text-muted-foreground">Atualize os dados do projeto</p>
+            <h1 className="text-2xl font-bold text-white">Editar Projeto de Suporte</h1>
+            <p className="text-sm text-white/90">Atualize os dados do projeto</p>
           </div>
         </div>
       </div>

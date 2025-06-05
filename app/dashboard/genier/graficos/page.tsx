@@ -562,13 +562,18 @@ export default function GenierGraficosPage() {
 
   return (
     <div className="flex flex-col h-full bg-white text-gray-800">
-      <div className="p-6 border-b border-gray-200 flex justify-between items-center">
+      <div className="p-6 bg-[#0056D6] text-white flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold">Gráficos - Genier</h1>
-          <p className="text-sm text-gray-500">Visualização gráfica das métricas do Genier</p>
+          <h1 className="text-2xl font-bold text-white">Gráficos - Genier</h1>
+          <p className="text-sm text-white/90">Visualização gráfica das métricas do Genier</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={handleRefresh} className="gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleRefresh}
+            className="gap-2 bg-white/10 border-white/20 text-white hover:bg-white/20"
+          >
             <RefreshCw className="h-4 w-4" />
             Atualizar
           </Button>
@@ -583,7 +588,7 @@ export default function GenierGraficosPage() {
               })
               handleRefresh()
             }}
-            className="gap-2"
+            className="gap-2 bg-white/10 border-white/20 text-white hover:bg-white/20"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"

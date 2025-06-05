@@ -116,117 +116,91 @@ export default function GenierMetricsRegistrationPage() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-center p-6 border-b">
-        <Button variant="ghost" size="icon" onClick={() => router.back()} className="mr-4">
+      <div className="flex items-center p-6 bg-[#0056D6] text-white">
+        <Button variant="ghost" size="icon" onClick={() => router.back()} className="mr-4 text-white hover:bg-white/20">
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <div>
-          <h1 className="text-2xl font-bold">Cadastro de Métricas do Genier</h1>
-          <p className="text-sm text-muted-foreground">Adicionar métricas do atendente virtual</p>
+          <h1 className="text-2xl font-bold text-white">Cadastro de Métricas do Genier</h1>
+          <p className="text-sm text-white/90">Adicionar métricas do atendente virtual</p>
         </div>
       </div>
 
       <div className="p-6 overflow-auto">
-        <Card className="max-w-2xl mx-auto bg-black text-white">
+        <Card className="max-w-2xl mx-auto">
           <CardHeader>
             <CardTitle>Métricas Genier</CardTitle>
-            <CardDescription className="text-gray-400">
-              Preencha os dados de métricas do Genier para a data selecionada
-            </CardDescription>
+            <CardDescription>Preencha os dados de métricas do Genier para a data selecionada</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-6">
               <div className="mb-4">
-                <Label htmlFor="date" className="text-white">
-                  Data
-                </Label>
-                <Input
-                  id="date"
-                  type="date"
-                  value={date}
-                  onChange={(e) => setDate(e.target.value)}
-                  className="bg-gray-900 border-gray-700 text-white"
-                />
+                <Label htmlFor="date">Data</Label>
+                <Input id="date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <Label htmlFor="articlesPublished" className="text-white">
-                    Artigos Publicados
-                  </Label>
+                  <Label htmlFor="articlesPublished">Artigos Publicados</Label>
                   <Input
                     id="articlesPublished"
                     type="number"
                     min="0"
                     value={articlesPublished}
                     onChange={(e) => setArticlesPublished(Number(e.target.value) || 0)}
-                    className="bg-gray-900 border-gray-700 text-white"
                   />
                 </div>
 
                 <div>
-                  <Label htmlFor="virtualAgentAttendances" className="text-white">
-                    Atendimentos do Agente Virtual
-                  </Label>
+                  <Label htmlFor="virtualAgentAttendances">Atendimentos do Agente Virtual</Label>
                   <Input
                     id="virtualAgentAttendances"
                     type="number"
                     min="0"
                     value={virtualAgentAttendances}
                     onChange={(e) => setVirtualAgentAttendances(Number(e.target.value) || 0)}
-                    className="bg-gray-900 border-gray-700 text-white"
                   />
                 </div>
 
                 <div>
-                  <Label htmlFor="virtualAgentResolved" className="text-white">
-                    Resolvidos pelo Agente Virtual
-                  </Label>
+                  <Label htmlFor="virtualAgentResolved">Resolvidos pelo Agente Virtual</Label>
                   <Input
                     id="virtualAgentResolved"
                     type="number"
                     min="0"
                     value={virtualAgentResolved}
                     onChange={(e) => setVirtualAgentResolved(Number(e.target.value) || 0)}
-                    className="bg-gray-900 border-gray-700 text-white"
                   />
                 </div>
 
                 <div>
-                  <Label htmlFor="virtualAgentUnresolved" className="text-white">
-                    Não Resolvidos pelo Agente Virtual
-                  </Label>
+                  <Label htmlFor="virtualAgentUnresolved">Não Resolvidos pelo Agente Virtual</Label>
                   <Input
                     id="virtualAgentUnresolved"
                     type="number"
                     min="0"
                     value={virtualAgentUnresolved}
                     onChange={(e) => setVirtualAgentUnresolved(Number(e.target.value) || 0)}
-                    className="bg-gray-900 border-gray-700 text-white"
                   />
                 </div>
 
                 <div>
-                  <Label htmlFor="registeredMaterials" className="text-white">
-                    Materiais Registrados
-                  </Label>
+                  <Label htmlFor="registeredMaterials">Materiais Registrados</Label>
                   <Textarea
                     id="registeredMaterials"
                     placeholder="Digite um material por linha"
-                    className="h-24 bg-gray-900 border-gray-700 text-white"
+                    className="h-24"
                     value={registeredMaterials}
                     onChange={(e) => setRegisteredMaterials(e.target.value)}
                   />
                 </div>
 
                 <div>
-                  <Label htmlFor="missingMaterials" className="text-white">
-                    Materiais Faltantes
-                  </Label>
+                  <Label htmlFor="missingMaterials">Materiais Faltantes</Label>
                   <Textarea
                     id="missingMaterials"
                     placeholder="Digite um material por linha"
-                    className="h-24 bg-gray-900 border-gray-700 text-white"
+                    className="h-24"
                     value={missingMaterials}
                     onChange={(e) => setMissingMaterials(e.target.value)}
                   />
@@ -234,20 +208,10 @@ export default function GenierMetricsRegistrationPage() {
               </div>
 
               <div className="flex justify-end gap-2 mt-6">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleClear}
-                  className="bg-transparent border-gray-600 text-gray-300 hover:bg-gray-800 hover:text-white"
-                >
+                <Button type="button" variant="outline" onClick={handleClear}>
                   Limpar
                 </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => router.back()}
-                  className="bg-transparent border-gray-600 text-gray-300 hover:bg-gray-800 hover:text-white"
-                >
+                <Button type="button" variant="outline" onClick={() => router.back()}>
                   Cancelar
                 </Button>
                 <Button type="submit" disabled={isSubmitting} className="bg-blue-600 text-white hover:bg-blue-700">

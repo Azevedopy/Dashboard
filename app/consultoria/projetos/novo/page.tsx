@@ -117,13 +117,13 @@ export default function NewConsultingProjectPage() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="p-6 border-b flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => router.back()}>
+      <div className="p-6 bg-[#0056D6] text-white flex items-center gap-4">
+        <Button variant="ghost" size="icon" onClick={() => router.back()} className="text-white hover:bg-white/20">
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <div>
-          <h1 className="text-2xl font-bold">Novo Projeto de Consultoria</h1>
-          <p className="text-sm text-muted-foreground">Cadastre um novo projeto de consultoria</p>
+          <h1 className="text-2xl font-bold text-white">Novo Projeto de Consultoria</h1>
+          <p className="text-sm text-white/90">Cadastre um novo projeto de consultoria</p>
         </div>
       </div>
 
