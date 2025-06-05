@@ -60,12 +60,13 @@ export default function GenierVisaoGeralPage() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="p-6 border-b flex justify-between items-center">
+      {/* Cabeçalho com faixa azul e texto branco */}
+      <div className="p-6 bg-[#0056D6] text-white flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold">Visão Geral - Genier</h1>
-          <p className="text-sm text-muted-foreground">Resumo das principais métricas do Genier</p>
+          <h1 className="text-2xl font-bold text-white">Visão Geral - Genier</h1>
+          <p className="text-sm text-white/90">Resumo das principais métricas do Genier</p>
         </div>
-        <Button variant="outline" size="sm" onClick={handleRefresh} className="gap-2">
+        <Button variant="secondary" size="sm" onClick={handleRefresh} className="gap-2">
           <RefreshCw className="h-4 w-4" />
           Atualizar
         </Button>

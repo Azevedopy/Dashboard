@@ -173,9 +173,10 @@ export default function ConsultoriaVisaoGeralPage() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="p-6 border-b">
-        <h1 className="text-2xl font-bold">Visão Geral - Consultoria</h1>
-        <p className="text-sm text-muted-foreground">Resumo das principais métricas de consultoria</p>
+      {/* Cabeçalho com faixa azul e texto branco */}
+      <div className="p-6 bg-[#0056D6] text-white">
+        <h1 className="text-2xl font-bold text-white">Visão Geral - Consultoria</h1>
+        <p className="text-sm text-white/90">Resumo das principais métricas de consultoria</p>
       </div>
 
       <div className="p-6 space-y-6">

@@ -186,7 +186,7 @@ export type SupportStats = {
 export interface ConsultingMetric {
   id?: string
   date: string
-  member_id: string
+  member_id?: string // Agora é opcional
   consultor: string
   client: string
   project_type: string

@@ -1,6 +1,6 @@
 import { getSupabase } from "./supabase"
 import type { Member, MetricEntry, DailyMetric, MemberMetrics } from "./types"
-import { format, parseISO, addDays } from "date-fns"
+import { format } from "date-fns"
 
 // Função auxiliar para converter snake_case para camelCase
 function snakeToCamel(metrics: MetricEntry[]): MetricEntry[] {
@@ -73,115 +73,156 @@ export async function createMember(member: Omit<Member, "id" | "joined_at" | "cr
   }
 }
 
-// Metrics
-// Adicionar logs específicos na função getMetrics
-
-export async function getMetrics(startDate?: string, endDate?: string): Promise<MetricEntry[]> {
+// Metrics - AJUSTADA para capturar registros antigos corretamente
+export async function getMetrics(startDate?: string, endDate?: string, serviceType?: string): Promise<MetricEntry[]> {
   try {
     const supabase = getSupabase()
-    console.log(`Buscando métricas de ${startDate || "início"} até ${endDate || "hoje"}`)
+    console.log(`=== INICIANDO BUSCA DE MÉTRICAS ===`)
+    console.log(
+      `Parâmetros: startDate=${startDate || "TODOS"}, endDate=${endDate || "TODOS"}, serviceType=${serviceType || "TODOS"}`,
+    )
 
-    // Primeiro, buscar as métricas
-    let query = supabase.from("metrics").select("*").order("date", { ascending: false })
+    // Construir a consulta base
+    let query = supabase.from("metrics").select("*")
 
+    // IMPORTANTE: Só aplicar filtros de data se explicitamente fornecidos
     if (startDate) {
-      // Usar a data exatamente como está, sem ajustes de fuso horário
+      // Usar >= em vez de > para incluir a data de início
       query = query.gte("date", startDate)
-      console.log(`Filtrando métricas a partir de ${startDate}`)
+      console.log(`✅ Aplicando filtro: date >= ${startDate}`)
+    } else {
+      console.log("📅 SEM filtro de data de início - buscando TODOS os registros históricos")
     }
 
     if (endDate) {
-      // Adicionar um dia ao endDate para incluir o próprio dia na consulta
-      const nextDay = addDays(parseISO(endDate), 1)
-      const adjustedEndDate = format(nextDay, "yyyy-MM-dd")
-
-      query = query.lt("date", adjustedEndDate)
-      console.log(`Filtrando métricas até ${endDate} (ajustado para ${adjustedEndDate})`)
+      // Usar <= em vez de < para incluir a data de fim
+      query = query.lte("date", endDate)
+      console.log(`✅ Aplicando filtro: date <= ${endDate}`)
+    } else {
+      console.log("📅 SEM filtro de data de fim - buscando até hoje")
     }
 
+    if (serviceType) {
+      query = query.eq("service_type", serviceType)
+      console.log(`✅ Aplicando filtro: service_type = ${serviceType}`)
+    } else {
+      console.log("🏷️  SEM filtro de tipo de serviço - buscando TODOS os tipos")
+    }
+
+    // Ordenar por data (mais recentes primeiro)
+    query = query.order("date", { ascending: false })
+
+    console.log("🔄 Executando consulta no Supabase...")
     const { data: metricsData, error: metricsError } = await query
 
     if (metricsError) {
-      console.error("Error fetching metrics:", metricsError)
+      console.error("❌ Error fetching metrics:", metricsError)
       return []
     }
 
-    // Se não temos métricas, retornar array vazio
     if (!metricsData || metricsData.length === 0) {
-      console.log("Nenhuma métrica encontrada para o período especificado")
+      console.log("❌ Nenhuma métrica encontrada para os filtros especificados")
       return []
     }
 
-    console.log(`Encontradas ${metricsData.length} métricas. Datas:`, metricsData.map((m) => m.date).sort())
+    console.log(`✅ Encontradas ${metricsData.length} métricas`)
 
-    // Log para verificar os dados brutos do Emerson
-    const emersonMetrics = metricsData.filter((m) => {
-      // Verificar se o member_id corresponde ao Emerson
-      // Isso depende de como os IDs estão estruturados no seu banco
-      return m.member_id && (m.member_id.includes("Emerson") || m.member_id === "emerson-id")
-    })
+    // Analisar a distribuição temporal dos dados
+    const dates = metricsData.map((m) => m.date).sort()
+    const oldestDate = dates[0]
+    const newestDate = dates[dates.length - 1]
+    console.log(`📅 Período dos dados: ${oldestDate} até ${newestDate}`)
 
-    if (emersonMetrics.length > 0) {
-      console.log("Dados brutos do Emerson do Supabase:", emersonMetrics)
-    }
+    // Verificar registros antes de 12/05/2024
+    const cutoffDate = "2024-05-12"
+    const beforeCutoff = metricsData.filter((m) => m.date < cutoffDate)
+    const afterCutoff = metricsData.filter((m) => m.date >= cutoffDate)
 
-    // Buscar todos os membros para mapear IDs para nomes
+    console.log(`📊 Registros antes de ${cutoffDate}: ${beforeCutoff.length}`)
+    console.log(`📊 Registros depois de ${cutoffDate}: ${afterCutoff.length}`)
+
+    // Verificar soma de open_tickets nos dados brutos
+    const totalOpenTicketsRaw = metricsData.reduce((sum, metric) => {
+      const openTickets = Number(metric.open_tickets || 0)
+      return sum + openTickets
+    }, 0)
+
+    console.log(`🎫 Soma total de open_tickets nos dados brutos: ${totalOpenTicketsRaw}`)
+
+    // Verificar se há registros com formatos de data diferentes
+    const dateFormats = metricsData.reduce(
+      (acc, metric) => {
+        const dateStr = metric.date
+        if (dateStr.includes("T")) {
+          acc.iso += 1
+        } else if (dateStr.includes("/")) {
+          acc.br += 1
+        } else if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+          acc.standard += 1
+        } else {
+          acc.other += 1
+        }
+        return acc
+      },
+      { iso: 0, br: 0, standard: 0, other: 0 },
+    )
+
+    console.log("📅 Formatos de data encontrados:", dateFormats)
+
+    // Buscar membros para mapear IDs para nomes
     const { data: membersData, error: membersError } = await supabase.from("members").select("id, name")
 
     if (membersError) {
-      console.error("Error fetching members:", membersError)
-      // Retornar métricas sem nomes de membros
-      return snakeToCamel(metricsData)
+      console.error("⚠️  Error fetching members:", membersError)
+      // Continuar sem nomes de membros
     }
 
-    // Criar um mapa de ID para nome
+    // Criar mapa de ID para nome
     const memberMap = new Map()
     membersData?.forEach((member) => {
       memberMap.set(member.id, member.name)
     })
 
-    // Adicionar nomes de membros às métricas sem modificar os valores numéricos
+    console.log(`👥 Mapeamento de membros: ${memberMap.size} membros encontrados`)
+
+    // Processar os dados
     const processedData = metricsData.map((metric) => {
       const memberName = memberMap.get(metric.member_id) || "Desconhecido"
-
-      // IMPORTANTE: Não modificar os valores numéricos aqui
-      // Manter os valores exatamente como vieram do banco de dados
-
-      // Log para verificar os dados do Emerson
-      if (memberName === "Emerson") {
-        console.log(`Métrica do Emerson - Data: ${metric.date}, Tempo médio: ${metric.average_response_time}`)
-      }
 
       return {
         ...metric,
         member: memberName,
-        // Manter a data exatamente como está no banco
-        date: metric.date,
-        // Manter os valores numéricos exatamente como estão
-        average_response_time: metric.average_response_time,
-        resolution_rate: metric.resolution_rate,
-        csat_score: metric.csat_score,
-        evaluated_percentage: metric.evaluated_percentage,
+        // Garantir que os valores numéricos sejam números
+        open_tickets: Number(metric.open_tickets || 0),
+        resolved_tickets: Number(metric.resolved_tickets || 0),
+        average_response_time: Number(metric.average_response_time || 0),
+        resolution_rate: Number(metric.resolution_rate || 0),
+        csat_score: Number(metric.csat_score || 0),
+        evaluated_percentage: Number(metric.evaluated_percentage || 0),
       }
     })
 
-    // Adicionar propriedades em camelCase para compatibilidade
+    // Verificar soma após processamento
+    const totalOpenTicketsProcessed = processedData.reduce((sum, metric) => {
+      return sum + metric.open_tickets
+    }, 0)
+
+    console.log(`🎫 Soma de open_tickets após processamento: ${totalOpenTicketsProcessed}`)
+
+    // Adicionar propriedades camelCase para compatibilidade
     const result = snakeToCamel(processedData)
 
-    // Log para verificar os dados finais do Emerson
-    const finalEmersonData = result.filter((m) => m.member === "Emerson")
-    if (finalEmersonData.length > 0) {
-      console.log("Dados finais do Emerson após processamento:", finalEmersonData)
-    }
+    console.log(`✅ Retornando ${result.length} registros processados`)
+    console.log(`=== BUSCA DE MÉTRICAS CONCLUÍDA ===`)
 
     return result
   } catch (error) {
-    console.error("Unexpected error fetching metrics:", error)
+    console.error("❌ Unexpected error fetching metrics:", error)
     return []
   }
 }
 
-// Buscar métricas específicas do Genier
+// Resto das funções permanecem iguais...
 export async function getGenierMetrics(startDate?: string, endDate?: string): Promise<MetricEntry[]> {
   try {
     const supabase = getSupabase()
@@ -209,10 +250,7 @@ export async function getGenierMetrics(startDate?: string, endDate?: string): Pr
     }
 
     if (endDate) {
-      // Adicionar um dia ao endDate para incluir o próprio dia na consulta
-      const nextDay = addDays(parseISO(endDate), 1)
-      const adjustedEndDate = format(nextDay, "yyyy-MM-dd")
-      query = query.lt("date", adjustedEndDate)
+      query = query.lte("date", endDate)
     }
 
     const { data, error } = await query
@@ -256,10 +294,7 @@ export async function getMemberMetrics(memberId: string, startDate?: string, end
     }
 
     if (endDate) {
-      // Adicionar um dia ao endDate para incluir o próprio dia na consulta
-      const nextDay = addDays(parseISO(endDate), 1)
-      const adjustedEndDate = format(nextDay, "yyyy-MM-dd")
-      query = query.lt("date", adjustedEndDate)
+      query = query.lte("date", endDate)
     }
 
     const { data, error } = await query
@@ -302,6 +337,7 @@ export async function createMetric(metricData: any): Promise<MetricEntry | null>
       evaluated_percentage: evaluated_percentage,
       open_tickets: metricData.open_tickets,
       resolved_tickets: metricData.resolved_tickets,
+      service_type: metricData.service_type,
     }
 
     console.log("Dados formatados para inserção:", data)
@@ -324,6 +360,7 @@ export async function createMetric(metricData: any): Promise<MetricEntry | null>
       evaluatedPercentage: result.evaluated_percentage,
       openTickets: result.open_tickets,
       resolvedTickets: result.resolved_tickets,
+      serviceType: result.service_type,
     }
   } catch (error) {
     console.error("Unexpected error creating metric:", error)
@@ -350,6 +387,7 @@ export async function updateMetric(id: string, metricData: any): Promise<MetricE
       evaluated_percentage: evaluated_percentage,
       open_tickets: metricData.open_tickets,
       resolved_tickets: metricData.resolved_tickets,
+      service_type: metricData.service_type,
     }
 
     console.log("Dados formatados para atualização:", data)
@@ -372,6 +410,7 @@ export async function updateMetric(id: string, metricData: any): Promise<MetricE
       evaluatedPercentage: result.evaluated_percentage,
       openTickets: result.open_tickets,
       resolvedTickets: result.resolved_tickets,
+      serviceType: result.service_type,
     }
   } catch (error) {
     console.error("Unexpected error updating metric:", error)
@@ -505,6 +544,7 @@ export async function uploadMetricsFromCSV(csvData: any[]): Promise<{ success: b
       evaluated_percentage: formatDecimal(Number.parseFloat(row.evaluated_percentage || "0")),
       open_tickets: Number.parseInt(row.open_tickets || "0", 10),
       resolved_tickets: Number.parseInt(row.resolved_tickets || "0", 10),
+      service_type: row.service_type,
     }))
 
     const { error } = await supabase.from("metrics").insert(formattedData)

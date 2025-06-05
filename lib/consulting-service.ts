@@ -237,8 +237,7 @@ export async function createConsultingMetric(metric: ConsultingMetric): Promise<
       valor_bonus: metric.bonus_8_percent,
       valor_bonus_12: metric.bonus_12_percent,
       status: metric.status,
-      // Campos adicionais que podem ser necessários
-      member_id: metric.member_id,
+      // Removido o campo member_id que não existe na tabela
     }
 
     const { data, error } = await supabase.from("metrics_consultoria").insert([projectData])

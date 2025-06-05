@@ -1,14 +1,13 @@
 "use client"
-
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
-import { RefreshCw } from "lucide-react"
+import { RefreshCw, Search } from "lucide-react"
 import { MetricsStats } from "@/components/dashboard/metrics-stats"
-import { SupportMetricsCards } from "@/components/support/support-metrics-cards"
+import { SupportStats } from "@/components/support/support-stats"
 import { useState, useEffect } from "react"
 import { getMetrics } from "@/lib/data-service"
 import { getSupportMetrics } from "@/lib/support-metrics-service"
+import { runDiagnostics } from "@/lib/diagnostics-service"
 import { format, subDays } from "date-fns"
 import { toast } from "@/components/ui/use-toast"
 import { Toaster } from "@/components/ui/toaster"
@@ -43,18 +42,19 @@ export default function VisaoGeralPage() {
           break
       }
 
-      // Buscar métricas específicas de suporte
-      const metricsData = await getMetrics(startDate, endDate, "suporte")
-      console.log(`Fetched ${metricsData.length} metrics for support dashboard`)
+      console.log(`🔄 Buscando dados de suporte de ${startDate} até ${endDate}`)
+
+      // Buscar métricas gerais
+      const metricsData = await getMetrics(startDate, endDate)
+      console.log(`📊 Fetched ${metricsData.length} metrics for support dashboard`)
       setMetrics(metricsData)
 
-      // Se você tiver implementado getSupportMetrics, atualize também
-      if (typeof getSupportMetrics === "function") {
-        const supportMetricsData = await getSupportMetrics(startDate, endDate)
-        setSupportMetrics(supportMetricsData)
-      }
+      // Buscar métricas calculadas de suporte
+      const supportMetricsData = await getSupportMetrics(startDate, endDate)
+      console.log("📈 Support metrics calculated:", supportMetricsData)
+      setSupportMetrics(supportMetricsData)
     } catch (error) {
-      console.error("Error fetching data:", error)
+      console.error("❌ Error fetching data:", error)
       toast({
         title: "Erro ao carregar dados",
         description: "Não foi possível carregar os dados. Tente novamente mais tarde.",
@@ -75,11 +75,21 @@ export default function VisaoGeralPage() {
     })
   }
 
+  const handleDiagnostics = async () => {
+    console.log("🔍 Executando diagnóstico completo...")
+    await runDiagnostics()
+    toast({
+      title: "Diagnóstico executado",
+      description: "Verifique o console para ver os resultados detalhados.",
+    })
+  }
+
   return (
     <div className="flex flex-col h-full">
-      <div className="p-6 border-b">
-        <h1 className="text-2xl font-bold">Visão Geral - Suporte</h1>
-        <p className="text-sm text-muted-foreground">Resumo das principais métricas de atendimento</p>
+      {/* Cabeçalho com faixa azul e texto branco */}
+      <div className="p-6 bg-[#0056D6] text-white">
+        <h1 className="text-2xl font-bold text-white">Visão Geral - Suporte</h1>
+        <p className="text-sm text-white/90">Resumo das principais métricas de atendimento</p>
       </div>
 
       <div className="p-6 space-y-6">
@@ -92,47 +102,32 @@ export default function VisaoGeralPage() {
             </TabsList>
           </Tabs>
 
-          <Button variant="outline" size="icon" onClick={handleRefresh} disabled={isRefreshing} title="Atualizar dados">
-            <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" size="icon" onClick={handleDiagnostics} title="Executar diagnóstico completo">
+              <Search className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+              title="Atualizar dados"
+            >
+              <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
+            </Button>
+          </div>
         </div>
 
-        {/* Novos cards de métricas de suporte */}
+        {/* Cards de métricas de suporte calculadas */}
         <div className="mb-6">
           <h2 className="text-lg font-semibold mb-4">Métricas Principais</h2>
-          <SupportMetricsCards metrics={supportMetrics} isLoading={isLoading} />
+          <SupportStats stats={supportMetrics} isLoading={isLoading} />
         </div>
 
-        {/* Métricas existentes */}
+        {/* Métricas detalhadas existentes */}
         <div className="mb-6">
           <h2 className="text-lg font-semibold mb-4">Métricas Detalhadas</h2>
           <MetricsStats metrics={metrics} isLoading={isLoading} />
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Desempenho por Atendente</CardTitle>
-              <CardDescription>Comparativo de métricas entre atendentes</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center justify-center h-[200px]">
-                <p className="text-muted-foreground">Dados em desenvolvimento</p>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Distribuição de Tickets</CardTitle>
-              <CardDescription>Tickets abertos vs. resolvidos</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center justify-center h-[200px]">
-                <p className="text-muted-foreground">Dados em desenvolvimento</p>
-              </div>
-            </CardContent>
-          </Card>
         </div>
       </div>
       <Toaster />

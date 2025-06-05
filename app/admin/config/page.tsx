@@ -17,8 +17,8 @@ export default function ConfigPage() {
 
   useEffect(() => {
     // Obter as variáveis de ambiente
-    setSupabaseUrl(process.env.NEXT_PUBLIC_SUPABASE_URL || "")
-    setSupabaseKey(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "")
+    setSupabaseUrl(process.env.EXPO_PUBLIC_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "")
+    setSupabaseKey(process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "")
   }, [])
 
   const testConnection = async () => {
@@ -60,9 +60,9 @@ export default function ConfigPage() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="p-6 border-b">
+      <div className="p-6 bg-[#0056D6] text-white">
         <h1 className="text-2xl font-bold">Configuração do Supabase</h1>
-        <p className="text-sm text-muted-foreground">Gerencie as configurações de conexão com o Supabase</p>
+        <p className="text-sm text-white/90">Gerencie as configurações de conexão com o Supabase</p>
       </div>
 
       <div className="p-6 space-y-6">
@@ -116,7 +116,7 @@ export default function ConfigPage() {
           <CardContent>
             <div className="space-y-4">
               <div>
-                <h3 className="text-sm font-medium mb-2">NEXT_PUBLIC_SUPABASE_URL</h3>
+                <h3 className="text-sm font-medium mb-2">EXPO_PUBLIC_SUPABASE_URL</h3>
                 <div className="bg-gray-100 p-3 rounded-md">
                   <code className="text-sm break-all">
                     {supabaseUrl ? supabaseUrl : "Variável de ambiente não definida"}
@@ -125,7 +125,7 @@ export default function ConfigPage() {
               </div>
 
               <div>
-                <h3 className="text-sm font-medium mb-2">NEXT_PUBLIC_SUPABASE_ANON_KEY</h3>
+                <h3 className="text-sm font-medium mb-2">EXPO_PUBLIC_SUPABASE_ANON_KEY</h3>
                 <div className="bg-gray-100 p-3 rounded-md">
                   <code className="text-sm break-all">
                     {supabaseKey

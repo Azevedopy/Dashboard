@@ -1,15 +1,14 @@
 "use client"
 
-import { Activity, Calendar, DollarSign, Star } from "lucide-react"
+import { CheckCircle, Users, XCircle } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
-import { formatCurrency } from "@/lib/utils"
 
 export function SupportStats({ stats, isLoading }) {
   if (isLoading) {
     return (
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {Array(4)
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        {Array(3)
           .fill(0)
           .map((_, i) => (
             <Card key={i}>
@@ -31,15 +30,15 @@ export function SupportStats({ stats, isLoading }) {
 
   if (!stats) {
     return (
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total de Projetos</CardTitle>
-            <Activity className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Total de Atendimentos</CardTitle>
+            <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">0</div>
-            <p className="text-xs text-muted-foreground">Nenhum projeto encontrado</p>
+            <p className="text-xs text-muted-foreground">Nenhum atendimento encontrado</p>
           </CardContent>
         </Card>
       </div>
@@ -47,48 +46,40 @@ export function SupportStats({ stats, isLoading }) {
   }
 
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Total de Projetos</CardTitle>
-          <Activity className="h-4 w-4 text-muted-foreground" />
+          <CardTitle className="text-sm font-medium">Total de Atendimentos</CardTitle>
+          <Users className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold">{stats.totalProjects}</div>
+          <div className="text-2xl font-bold">{stats.totalTickets.toLocaleString()}</div>
+          <p className="text-xs text-muted-foreground">Soma de todos os tickets abertos</p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className="text-sm font-medium">Resolvidos no Primeiro Atendimento</CardTitle>
+          <CheckCircle className="h-4 w-4 text-green-500" />
+        </CardHeader>
+        <CardContent>
+          <div className="text-2xl font-bold">{stats.resolvedFirstContact.toLocaleString()}</div>
           <p className="text-xs text-muted-foreground">
-            {stats.activeProjects} em andamento, {stats.completedProjects} concluídos
+            {((stats.resolvedFirstContact / stats.totalTickets) * 100).toFixed(1)}% do total de atendimentos
           </p>
         </CardContent>
       </Card>
+
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Receita Total</CardTitle>
-          <DollarSign className="h-4 w-4 text-muted-foreground" />
+          <CardTitle className="text-sm font-medium">Não Resolvidos no Primeiro Atendimento</CardTitle>
+          <XCircle className="h-4 w-4 text-amber-500" />
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold">{formatCurrency(stats.totalRevenue)}</div>
-          <p className="text-xs text-muted-foreground">Valor total dos projetos</p>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Duração Média</CardTitle>
-          <Calendar className="h-4 w-4 text-muted-foreground" />
-        </CardHeader>
-        <CardContent>
-          <div className="text-2xl font-bold">{Math.round(stats.averageProjectDuration)} dias</div>
-          <p className="text-xs text-muted-foreground">Tempo médio de execução</p>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Avaliação Média</CardTitle>
-          <Star className="h-4 w-4 text-muted-foreground" />
-        </CardHeader>
-        <CardContent>
-          <div className="text-2xl font-bold">{stats.averageRating.toFixed(1)}</div>
+          <div className="text-2xl font-bold">{stats.notResolvedFirstContact.toLocaleString()}</div>
           <p className="text-xs text-muted-foreground">
-            {stats.deadlineComplianceRate.toFixed(0)}% de cumprimento de prazo
+            {((stats.notResolvedFirstContact / stats.totalTickets) * 100).toFixed(1)}% do total de atendimentos
           </p>
         </CardContent>
       </Card>
