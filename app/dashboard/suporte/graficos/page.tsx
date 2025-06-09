@@ -48,108 +48,91 @@ export default function GraficosPage() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [isManageMode, setIsManageMode] = useState(false)
 
-  useEffect(() => {
-    fetchData()
-  }, [period, selectedMetric])
+  // Função para calcular datas baseadas no período
+  const calculateDateRange = (periodValue: string) => {
+    const today = new Date()
+    let startDate: string
+    let newFrom: Date
 
-  // Efeito para filtrar métricas com base nos atendentes selecionados
-  useEffect(() => {
-    console.log("=== FILTRO DE MÉTRICAS ===")
-    console.log("Total de métricas:", metrics.length)
-    console.log("Estado dos membros selecionados:", selectedMembers)
-
-    if (metrics.length === 0) {
-      setFilteredMetrics([])
-      return
+    switch (periodValue) {
+      case "7d":
+        newFrom = subDays(today, 7)
+        startDate = format(newFrom, "yyyy-MM-dd")
+        break
+      case "15d":
+        newFrom = subDays(today, 15)
+        startDate = format(newFrom, "yyyy-MM-dd")
+        break
+      case "30d":
+      default:
+        // Usar o início do mês atual ou 30 dias atrás, o que for mais antigo
+        const startOfCurrentMonth = startOfMonth(today)
+        const thirtyDaysAgo = subDays(today, 30)
+        newFrom = startOfCurrentMonth < thirtyDaysAgo ? startOfCurrentMonth : thirtyDaysAgo
+        startDate = format(newFrom, "yyyy-MM-dd")
+        break
     }
 
-    // Se nenhum atendente estiver selecionado, mostrar todos
-    const hasSelectedMembers = Object.values(selectedMembers).some((selected) => selected)
-    console.log("Tem membros selecionados:", hasSelectedMembers)
+    const endDate = format(today, "yyyy-MM-dd")
 
-    if (!hasSelectedMembers) {
-      console.log("Nenhum membro selecionado, mostrando todos")
-      setFilteredMetrics(metrics)
-      return
+    return {
+      startDate,
+      endDate,
+      from: newFrom,
+      to: today,
     }
+  }
 
-    // Filtrar métricas pelos atendentes selecionados
-    const filtered = metrics.filter((metric) => {
-      const memberName = metric.member || "Desconhecido"
-      const isSelected = selectedMembers[memberName]
-      console.log(`Membro: ${memberName}, Selecionado: ${isSelected}`)
-      return isSelected
-    })
-
-    console.log("Métricas filtradas:", filtered.length)
-    setFilteredMetrics(filtered)
-  }, [metrics, selectedMembers])
-
-  const fetchData = async () => {
+  // Função principal para buscar dados
+  const fetchData = async (customStartDate?: string, customEndDate?: string) => {
     setIsLoading(true)
     try {
+      console.log("=== INICIANDO BUSCA DE DADOS DOS GRÁFICOS ===")
+
       const membersData = await getMembers()
       setMembers(membersData)
 
-      let startDate
-      // Usar a data atual
-      const today = new Date()
-      const endDate = format(today, "yyyy-MM-dd")
+      let startDate: string
+      let endDate: string
+      let newDateRange: { from: Date; to: Date }
+
+      // Se datas customizadas foram fornecidas, use-as
+      if (customStartDate && customEndDate) {
+        startDate = customStartDate
+        endDate = customEndDate
+        newDateRange = {
+          from: new Date(customStartDate),
+          to: new Date(customEndDate),
+        }
+        console.log(`Usando período customizado: ${startDate} até ${endDate}`)
+      } else {
+        // Calcular baseado no período selecionado
+        const calculated = calculateDateRange(period)
+        startDate = calculated.startDate
+        endDate = calculated.endDate
+        newDateRange = {
+          from: calculated.from,
+          to: calculated.to,
+        }
+        console.log(`Usando período ${period}: ${startDate} até ${endDate}`)
+      }
+
+      // Atualizar o estado do dateRange
+      setDateRange(newDateRange)
 
       // Informações de debug
-      let debugText = `Data final: ${endDate}\n`
+      let debugText = `Período: ${period}\n`
+      debugText += `Data inicial: ${startDate}\n`
+      debugText += `Data final: ${endDate}\n`
 
-      // Atualizar o dateRange com base no período selecionado
-      let newFrom
-      switch (period) {
-        case "7d":
-          newFrom = subDays(today, 7)
-          startDate = format(newFrom, "yyyy-MM-dd")
-          debugText += `Período: 7 dias, Data inicial: ${startDate}\n`
-          break
-        case "15d":
-          newFrom = subDays(today, 15)
-          startDate = format(newFrom, "yyyy-MM-dd")
-          debugText += `Período: 15 dias, Data inicial: ${startDate}\n`
-          break
-        case "30d":
-        default:
-          // Usar o início do mês atual ou 30 dias atrás, o que for mais antigo
-          const startOfCurrentMonth = startOfMonth(today)
-          const thirtyDaysAgo = subDays(today, 30)
-
-          // Usar a data mais antiga entre o início do mês e 30 dias atrás
-          newFrom = startOfCurrentMonth < thirtyDaysAgo ? startOfCurrentMonth : thirtyDaysAgo
-
-          startDate = format(newFrom, "yyyy-MM-dd")
-          debugText += `Período: 30 dias, Data inicial: ${startDate}\n`
-          break
-      }
-
-      // Atualizar o estado do dateRange para refletir o período selecionado
-      if (newFrom && period !== "custom") {
-        setDateRange({
-          from: newFrom,
-          to: today,
-        })
-      }
-
-      // Buscar métricas
-      debugText += `Buscando métricas de ${startDate} até ${endDate}\n`
+      // Buscar métricas para o período especificado
+      console.log(`Buscando métricas de ${startDate} até ${endDate}`)
       const metricsData = await getMetrics(startDate, endDate)
       debugText += `Métricas recebidas: ${metricsData.length}\n`
 
-      // Adicionar log para verificar os dados do Emerson
-      const emersonMetrics = metricsData.filter((m) => {
-        const member = membersData.find((mem) => mem.id === m.member_id)
-        return member?.name === "Emerson"
-      })
-
-      if (emersonMetrics.length > 0) {
-        debugText += `\nMétricas do Emerson:\n`
-        emersonMetrics.forEach((m) => {
-          debugText += `Data: ${m.date}, Tempo médio: ${m.average_response_time}\n`
-        })
+      if (metricsData.length === 0) {
+        console.log("⚠️ Nenhuma métrica encontrada para o período")
+        debugText += "⚠️ Nenhuma métrica encontrada para o período\n"
       }
 
       // Adicionar nome do membro a cada métrica
@@ -164,13 +147,19 @@ export default function GraficosPage() {
       // Adicionar informações sobre as datas das métricas para debug
       if (metricsWithMemberNames.length > 0) {
         const dates = metricsWithMemberNames.map((m) => m.date).sort()
-        debugText += `Datas das métricas: ${dates.join(", ")}\n`
+        debugText += `Datas das métricas: ${dates[0]} até ${dates[dates.length - 1]}\n`
 
         // Log dos membros únicos encontrados
         const uniqueMembersFound = Array.from(
           new Set(metricsWithMemberNames.map((item) => item.member || "Desconhecido")),
         )
         debugText += `Membros encontrados: ${uniqueMembersFound.join(", ")}\n`
+        debugText += `Total de registros por membro:\n`
+
+        uniqueMembersFound.forEach((member) => {
+          const count = metricsWithMemberNames.filter((m) => m.member === member).length
+          debugText += `  ${member}: ${count} registros\n`
+        })
       }
 
       setDebugInfo(debugText)
@@ -202,21 +191,72 @@ export default function GraficosPage() {
     }
   }
 
-  const handleFilter = () => {
-    setIsCalendarOpen(false)
+  // Effect para carregar dados iniciais e quando o período mudar
+  useEffect(() => {
+    console.log(`Período alterado para: ${period}`)
     fetchData()
-  }
+  }, [period, selectedMetric])
+
+  // Efeito para filtrar métricas com base nos atendentes selecionados
+  useEffect(() => {
+    console.log("=== FILTRO DE MÉTRICAS ===")
+    console.log("Total de métricas:", metrics.length)
+    console.log("Estado dos membros selecionados:", selectedMembers)
+
+    if (metrics.length === 0) {
+      setFilteredMetrics([])
+      return
+    }
+
+    // Se nenhum atendente estiver selecionado, mostrar todos
+    const hasSelectedMembers = Object.values(selectedMembers).some((selected) => selected)
+    console.log("Tem membros selecionados:", hasSelectedMembers)
+
+    if (!hasSelectedMembers) {
+      console.log("Nenhum membro selecionado, mostrando todos")
+      setFilteredMetrics(metrics)
+      return
+    }
+
+    // Filtrar métricas pelos atendentes selecionados
+    const filtered = metrics.filter((metric) => {
+      const memberName = metric.member || "Desconhecido"
+      const isSelected = selectedMembers[memberName]
+      return isSelected
+    })
+
+    console.log("Métricas filtradas:", filtered.length)
+    setFilteredMetrics(filtered)
+  }, [metrics, selectedMembers])
 
   const handleRefresh = async () => {
     setIsRefreshing(true)
-    await fetchData()
+
+    // Se estiver usando período customizado, manter as datas
+    if (period === "custom") {
+      const startDate = format(dateRange.from, "yyyy-MM-dd")
+      const endDate = format(dateRange.to, "yyyy-MM-dd")
+      await fetchData(startDate, endDate)
+    } else {
+      await fetchData()
+    }
+
     toast({
       title: "Dados atualizados",
       description: "Os dados foram atualizados com sucesso.",
     })
   }
 
-  const handleCustomDateFilter = () => {
+  const handleCustomDateFilter = async () => {
+    if (!dateRange.from || !dateRange.to) {
+      toast({
+        title: "Período inválido",
+        description: "Selecione uma data de início e fim válidas.",
+        variant: "destructive",
+      })
+      return
+    }
+
     setPeriod("custom")
     setIsCalendarOpen(false)
 
@@ -224,31 +264,23 @@ export default function GraficosPage() {
     const startDate = format(dateRange.from, "yyyy-MM-dd")
     const endDate = format(dateRange.to, "yyyy-MM-dd")
 
-    setIsLoading(true)
-    getMetrics(startDate, endDate)
-      .then((metricsData) => {
-        // Adicionar nome do membro a cada métrica
-        const metricsWithMemberNames = metricsData.map((metric) => {
-          const member = members.find((m) => m.id === metric.member_id)
-          return {
-            ...metric,
-            member: member?.name || "Desconhecido",
-          }
-        })
+    console.log(`Aplicando filtro customizado: ${startDate} até ${endDate}`)
+    await fetchData(startDate, endDate)
+  }
 
-        setMetrics(metricsWithMemberNames)
+  // Função para alterar período
+  const handlePeriodChange = (newPeriod: string) => {
+    console.log(`Alterando período de ${period} para ${newPeriod}`)
+    setPeriod(newPeriod)
+
+    // Se não for customizado, atualizar o dateRange automaticamente
+    if (newPeriod !== "custom") {
+      const calculated = calculateDateRange(newPeriod)
+      setDateRange({
+        from: calculated.from,
+        to: calculated.to,
       })
-      .catch((error) => {
-        console.error("Error fetching data:", error)
-        toast({
-          title: "Erro ao carregar dados",
-          description: "Não foi possível carregar os dados. Tente novamente mais tarde.",
-          variant: "destructive",
-        })
-      })
-      .finally(() => {
-        setIsLoading(false)
-      })
+    }
   }
 
   // Determinar o tipo de gráfico com base na métrica selecionada
@@ -326,7 +358,15 @@ export default function GraficosPage() {
   }
 
   const handleEditSuccess = () => {
-    fetchData()
+    // Recarregar dados após edição
+    if (period === "custom") {
+      const startDate = format(dateRange.from, "yyyy-MM-dd")
+      const endDate = format(dateRange.to, "yyyy-MM-dd")
+      fetchData(startDate, endDate)
+    } else {
+      fetchData()
+    }
+
     toast({
       title: "Métrica atualizada",
       description: "A métrica foi atualizada com sucesso.",
@@ -388,11 +428,29 @@ export default function GraficosPage() {
     }
   }
 
+  // Função para obter o texto do período atual
+  const getCurrentPeriodText = () => {
+    if (period === "custom") {
+      return `${format(dateRange.from, "dd/MM/yyyy", { locale: ptBR })} - ${format(dateRange.to, "dd/MM/yyyy", { locale: ptBR })}`
+    }
+
+    switch (period) {
+      case "7d":
+        return "Últimos 7 dias"
+      case "15d":
+        return "Últimos 15 dias"
+      case "30d":
+        return "Últimos 30 dias"
+      default:
+        return "Período selecionado"
+    }
+  }
+
   return (
     <div className="flex flex-col h-full">
       <div className="p-6 bg-[#0056D6] text-white">
         <h1 className="text-2xl font-bold text-white">Gráficos - Suporte</h1>
-        <p className="text-sm text-white/90">Visualização gráfica das métricas de suporte</p>
+        <p className="text-sm text-white/90">Visualização gráfica das métricas de suporte - {getCurrentPeriodText()}</p>
       </div>
 
       <div className="p-6 space-y-6">
@@ -525,7 +583,7 @@ export default function GraficosPage() {
 
               <div className="w-full md:w-1/3">
                 <label className="text-sm font-medium mb-2 block">Período</label>
-                <Tabs defaultValue={period} onValueChange={setPeriod} className="w-full">
+                <Tabs value={period} onValueChange={handlePeriodChange} className="w-full">
                   <TabsList className="w-full">
                     <TabsTrigger value="7d" className="flex-1">
                       7 dias
@@ -600,6 +658,7 @@ export default function GraficosPage() {
                   (Filtrado: {selectedCount} de {totalMembers} atendentes)
                 </span>
               )}
+              <span className="ml-2 text-muted-foreground">• {getCurrentPeriodText()}</span>
             </CardDescription>
           </CardHeader>
           <CardContent className="h-[400px]">
@@ -631,7 +690,9 @@ export default function GraficosPage() {
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
               <CardTitle>Gerenciamento de Métricas</CardTitle>
-              <CardDescription>Total de métricas carregadas: {metrics.length}</CardDescription>
+              <CardDescription>
+                Total de métricas carregadas: {metrics.length} • {getCurrentPeriodText()}
+              </CardDescription>
             </div>
             <div className="flex gap-2">
               <Button
@@ -656,6 +717,7 @@ export default function GraficosPage() {
               ) : metrics.length === 0 ? (
                 <div className="text-center py-8">
                   <p>Nenhuma métrica encontrada para os filtros selecionados.</p>
+                  <p className="text-sm text-muted-foreground mt-2">Período: {getCurrentPeriodText()}</p>
                 </div>
               ) : (
                 <div className="rounded-md border">
@@ -745,10 +807,7 @@ export default function GraficosPage() {
               // Modo de visualização resumida
               <div className="text-center py-8">
                 <p>Clique em "Gerenciar Métricas" para visualizar e editar as métricas disponíveis.</p>
-                <p className="text-sm text-muted-foreground mt-2">
-                  Período: {dateRange.from ? format(dateRange.from, "dd/MM/yyyy", { locale: ptBR }) : "N/A"} até{" "}
-                  {dateRange.to ? format(dateRange.to, "dd/MM/yyyy", { locale: ptBR }) : "N/A"}
-                </p>
+                <p className="text-sm text-muted-foreground mt-2">{getCurrentPeriodText()}</p>
               </div>
             )}
           </CardContent>
