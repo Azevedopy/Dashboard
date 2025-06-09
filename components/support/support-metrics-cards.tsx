@@ -40,11 +40,13 @@ export function SupportMetricsCards({ metrics, isLoading }: SupportMetricsCardsP
             <div className="flex flex-col">
               <div className="flex items-center space-x-2 mb-2">
                 <CheckCircle className="h-5 w-5 text-muted-foreground" />
-                <span className="text-sm font-medium text-muted-foreground">Taxa de Resolução</span>
+                <span className="text-sm font-medium text-muted-foreground">
+                  Taxa de Resolução no Primeiro Atendimento
+                </span>
               </div>
               <div className={`text-3xl font-bold ${resolutionRateColor}`}>{resolutionRate}%</div>
               <p className="text-sm text-muted-foreground mt-1">
-                {metrics?.resolvedTickets || 0} de {metrics?.totalTickets || 0} atendimentos resolvidos
+                {metrics?.resolvedTickets || 0} resolvidos de {metrics?.openTickets || 0} atendimentos abertos
               </p>
             </div>
           )}

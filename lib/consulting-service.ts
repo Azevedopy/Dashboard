@@ -86,6 +86,9 @@ export async function createConsultingProject(
 export async function updateConsultingProject(project: Partial<ConsultingProject>): Promise<ConsultingProject | null> {
   try {
     const supabase = getSupabase()
+
+    console.log("Atualizando projeto de consultoria:", project)
+
     const { data, error } = await supabase
       .from("metrics_consultoria")
       .update(project)
@@ -98,6 +101,7 @@ export async function updateConsultingProject(project: Partial<ConsultingProject
       return null
     }
 
+    console.log("Projeto atualizado com sucesso:", data)
     return data
   } catch (error) {
     console.error("Unexpected error updating consulting project:", error)

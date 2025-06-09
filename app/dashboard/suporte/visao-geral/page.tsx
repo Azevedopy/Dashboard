@@ -42,16 +42,16 @@ export default function VisaoGeralPage() {
           break
       }
 
-      console.log(`🔄 Buscando dados de suporte de ${startDate} até ${endDate}`)
+      console.log(`🔄 Buscando dados de suporte de ${startDate} até ${endDate} (${period})`)
 
-      // Buscar métricas gerais
+      // Buscar métricas gerais com filtro de data
       const metricsData = await getMetrics(startDate, endDate)
-      console.log(`📊 Fetched ${metricsData.length} metrics for support dashboard`)
+      console.log(`📊 Fetched ${metricsData.length} metrics for support dashboard (${period})`)
       setMetrics(metricsData)
 
-      // Buscar métricas calculadas de suporte
+      // Buscar métricas calculadas de suporte COM FILTRO DE DATA
       const supportMetricsData = await getSupportMetrics(startDate, endDate)
-      console.log("📈 Support metrics calculated:", supportMetricsData)
+      console.log("📈 Support metrics calculated for period:", supportMetricsData)
       setSupportMetrics(supportMetricsData)
     } catch (error) {
       console.error("❌ Error fetching data:", error)
@@ -71,7 +71,7 @@ export default function VisaoGeralPage() {
     setIsRefreshing(false)
     toast({
       title: "Dados atualizados",
-      description: "Os dados foram atualizados com sucesso.",
+      description: `Os dados foram atualizados para o período selecionado (${period}).`,
     })
   }
 
@@ -84,12 +84,24 @@ export default function VisaoGeralPage() {
     })
   }
 
+  const getPeriodLabel = () => {
+    switch (period) {
+      case "7d":
+        return "últimos 7 dias"
+      case "15d":
+        return "últimos 15 dias"
+      case "30d":
+      default:
+        return "últimos 30 dias"
+    }
+  }
+
   return (
     <div className="flex flex-col h-full">
       {/* Cabeçalho com faixa azul e texto branco */}
       <div className="p-6 bg-[#0056D6] text-white">
         <h1 className="text-2xl font-bold text-white">Visão Geral - Suporte</h1>
-        <p className="text-sm text-white/90">Resumo das principais métricas de atendimento</p>
+        <p className="text-sm text-white/90">Resumo das principais métricas de atendimento - {getPeriodLabel()}</p>
       </div>
 
       <div className="p-6 space-y-6">

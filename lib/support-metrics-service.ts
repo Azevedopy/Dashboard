@@ -22,28 +22,37 @@ export async function getSupportMetrics(
     console.log(`=== INICIANDO CÁLCULO DE MÉTRICAS DE SUPORTE ===`)
     console.log(`Parâmetros recebidos: startDate=${startDate}, endDate=${endDate}`)
 
-    // IMPORTANTE: Buscar TODOS os registros sem filtros de data para calcular o total real
-    console.log("🔍 Buscando TODOS os registros (ignorando filtros de data para total)")
-    const allMetrics = await getMetrics() // SEM filtros de data
+    // Buscar métricas respeitando os filtros de data fornecidos
+    const metrics = await getMetrics(startDate, endDate)
 
-    if (!allMetrics || allMetrics.length === 0) {
-      console.log("❌ Nenhuma métrica encontrada na tabela")
-      return null
+    if (!metrics || metrics.length === 0) {
+      console.log("❌ Nenhuma métrica encontrada para o período especificado")
+      return {
+        totalTickets: 0,
+        resolvedFirstContact: 0,
+        notResolvedFirstContact: 0,
+        resolvedTickets: 0,
+        openTickets: 0,
+        evaluatedTickets: 0,
+        resolutionRate: 0,
+        csatScore: 0,
+        evaluatedPercentage: 0,
+      }
     }
 
-    console.log(`📊 Total de registros encontrados na tabela: ${allMetrics.length}`)
+    console.log(`📊 Total de registros encontrados para o período: ${metrics.length}`)
+    if (startDate && endDate) {
+      console.log(`📅 Período: ${startDate} até ${endDate}`)
+    }
 
-    // Usar TODOS os registros para o cálculo (não apenas os filtrados)
-    const metrics = allMetrics
-
-    // Calcular totais usando TODOS os registros
+    // Calcular totais usando os registros do período filtrado
     let totalOpenTickets = 0
     let totalResolvedTickets = 0
     let resolvedFirstContact = 0
     let evaluatedTickets = 0
     let totalCsatSum = 0
 
-    console.log("🔄 Processando TODOS os registros para cálculo...")
+    console.log("🔄 Processando registros do período filtrado...")
 
     metrics.forEach((metric, index) => {
       // Garantir conversão correta para números
@@ -94,36 +103,33 @@ export async function getSupportMetrics(
         evaluatedTickets += 1
       }
 
-      // Log detalhado dos primeiros 10 registros
-      if (index < 10) {
+      // Log detalhado dos primeiros 5 registros
+      if (index < 5) {
         console.log(
           `📝 Registro ${index + 1}: Data=${metric.date}, Open=${openTickets}, Resolved=${resolvedTickets}, FirstContact=${isFirstContact}`,
         )
       }
     })
 
-    // CORREÇÃO: Total de atendimentos = APENAS soma de open_tickets
-    const totalTickets = totalOpenTickets // NÃO somar com resolved_tickets
+    // Total de atendimentos = APENAS soma de open_tickets
+    const totalTickets = totalOpenTickets
 
-    // CORREÇÃO: Não resolvidos no primeiro atendimento = Total - Resolvidos no primeiro atendimento
+    // Não resolvidos no primeiro atendimento = Total - Resolvidos no primeiro atendimento
     const notResolvedFirstContact = totalTickets - resolvedFirstContact
 
-    // Calcular outras métricas (mesmo que não sejam exibidas, para manter compatibilidade)
-    const totalForResolutionRate = totalOpenTickets + totalResolvedTickets
-    const resolutionRate = totalForResolutionRate > 0 ? (totalResolvedTickets / totalForResolutionRate) * 100 : 0
+    // Calcular taxa de resolução usando a nova fórmula: (resolved_tickets / open_tickets) * 100
+    const resolutionRate = totalOpenTickets > 0 ? (totalResolvedTickets / totalOpenTickets) * 100 : 0
     const csatScore = evaluatedTickets > 0 ? totalCsatSum / evaluatedTickets : 0
-    const evaluatedPercentage = metrics.length > 0 ? (evaluatedTickets / metrics.length) * 100 : 0
+    const evaluatedPercentage = totalTickets > 0 ? (evaluatedTickets / totalTickets) * 100 : 0
 
     // Se não temos dados de resolução no primeiro contato, vamos estimar
     if (resolvedFirstContact === 0 && totalTickets > 0) {
       console.log("⚠️  Sem dados específicos de resolução no primeiro contato. Usando estimativa...")
       // Estimativa: 60% resolvidos no primeiro contato
       resolvedFirstContact = Math.round(totalTickets * 0.6)
-      // Recalcular não resolvidos
-      const notResolvedFirstContact = totalTickets - resolvedFirstContact
     }
 
-    console.log("=== RESUMO FINAL DOS CÁLCULOS ===")
+    console.log("=== RESUMO FINAL DOS CÁLCULOS (PERÍODO FILTRADO) ===")
     console.log(`📊 Total de registros processados: ${metrics.length}`)
     console.log(`🎫 Total de ATENDIMENTOS (apenas open_tickets): ${totalTickets}`)
     console.log(`✅ Resolvidos no primeiro atendimento: ${resolvedFirstContact}`)
@@ -131,8 +137,10 @@ export async function getSupportMetrics(
     console.log(`🎫 Open tickets: ${totalOpenTickets}`)
     console.log(`✅ Resolved tickets: ${totalResolvedTickets}`)
     console.log(
-      `📊 Fórmula: Não resolvidos = Total (${totalTickets}) - Resolvidos no primeiro (${resolvedFirstContact})`,
+      `📊 Taxa de resolução: ${resolutionRate.toFixed(2)}% (${totalResolvedTickets} resolvidos / ${totalOpenTickets} abertos)`,
     )
+    console.log(`⭐ CSAT Score: ${csatScore.toFixed(2)} (${evaluatedTickets} avaliações)`)
+    console.log(`📈 % Avaliados: ${evaluatedPercentage.toFixed(2)}%`)
 
     return {
       totalTickets,

@@ -9,7 +9,12 @@ export async function getCompletedConsultingProjects(filters?: {
 }): Promise<ConsultingProject[]> {
   try {
     const supabase = getSupabase()
-    let query = supabase.from("view_consultorias_concluidas").select("*")
+
+    // Mudança: usar a tabela principal metrics_consultoria em vez da view
+    let query = supabase.from("metrics_consultoria").select("*").eq("status", "concluido") // Apenas projetos concluídos
+
+    // Adicionar logs para diagnóstico
+    console.log("Buscando consultorias concluídas com filtros:", filters)
 
     // Aplicar filtros
     if (filters) {
@@ -34,6 +39,7 @@ export async function getCompletedConsultingProjects(filters?: {
       throw error
     }
 
+    console.log(`Consultorias concluídas encontradas: ${data?.length || 0}`)
     return data as ConsultingProject[]
   } catch (error) {
     console.error("Error in getCompletedConsultingProjects:", error)
@@ -105,9 +111,11 @@ export async function getCompletedConsultingStats(filters?: {
 export async function getCompletedConsultores(): Promise<string[]> {
   try {
     const supabase = getSupabase()
+    // Mudança: usar a tabela principal metrics_consultoria em vez da view
     const { data, error } = await supabase
-      .from("view_consultorias_concluidas")
+      .from("metrics_consultoria")
       .select("consultor")
+      .eq("status", "concluido") // Apenas projetos concluídos
       .not("consultor", "is", null)
       .order("consultor")
 
@@ -135,9 +143,11 @@ export async function getConsultantCommissions(
     if (!consultores.length) return []
 
     const supabase = getSupabase()
+    // Mudança: usar a tabela principal metrics_consultoria em vez da view
     let query = supabase
-      .from("view_consultorias_concluidas")
+      .from("metrics_consultoria")
       .select("consultor, valor_comissao")
+      .eq("status", "concluido") // Apenas projetos concluídos
       .in("consultor", consultores)
       .not("valor_comissao", "is", null)
 

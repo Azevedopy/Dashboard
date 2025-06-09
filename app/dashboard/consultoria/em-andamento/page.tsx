@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { CalendarIcon, Download, Filter, RefreshCw } from "lucide-react"
+import { useRouter } from "next/navigation"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -30,6 +31,7 @@ export default function ConsultoriasEmAndamentoPage() {
     },
   })
   const [isCalendarOpen, setIsCalendarOpen] = useState(false)
+  const router = useRouter()
 
   useEffect(() => {
     fetchData()
@@ -139,8 +141,7 @@ export default function ConsultoriasEmAndamentoPage() {
       // Calcular comissão
       const { percentual, valor } = calculateCommission(project.valor_consultoria, avaliacao, prazoAtingido)
 
-      // Atualizar o projeto
-      await updateConsultingProject({
+      console.log("Finalizando consultoria:", {
         id,
         status: "concluido",
         data_finalizacao: new Date().toISOString().split("T")[0],
@@ -150,13 +151,33 @@ export default function ConsultoriasEmAndamentoPage() {
         valor_comissao: valor,
       })
 
+      // Atualizar o projeto
+      const result = await updateConsultingProject({
+        id,
+        status: "concluido",
+        data_finalizacao: new Date().toISOString().split("T")[0],
+        avaliacao_estrelas: avaliacao,
+        prazo_atingido: prazoAtingido,
+        percentual_comissao: percentual,
+        valor_comissao: valor,
+      })
+
+      if (!result) {
+        throw new Error("Erro ao finalizar consultoria")
+      }
+
       toast({
         title: "Consultoria finalizada",
         description: `A consultoria para ${project.cliente} foi finalizada com sucesso.`,
       })
 
-      // Recarregar dados
+      // Recarregar dados após finalizar
       fetchData()
+
+      // Redirecionar para a página de consultorias concluídas
+      setTimeout(() => {
+        router.push("/dashboard/consultoria/concluidas")
+      }, 1500)
     } catch (error) {
       console.error("Error finalizing project:", error)
       toast({

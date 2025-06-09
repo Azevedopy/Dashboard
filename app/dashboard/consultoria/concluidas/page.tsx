@@ -1,9 +1,9 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
-import { CalendarIcon, Download } from "lucide-react"
+import { CalendarIcon, Download, RefreshCw } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Calendar } from "@/components/ui/calendar"
@@ -15,6 +15,7 @@ import { CompletedConsultingTable } from "@/components/consulting/completed-cons
 import { ConsultantCommissionChart } from "@/components/consulting/consultant-commission-chart"
 import { cn } from "@/lib/utils"
 import { exportToExcel } from "@/lib/export-utils"
+import { toast } from "@/components/ui/use-toast"
 import {
   getCompletedConsultingProjects,
   getCompletedConsultingStats,
@@ -44,71 +45,115 @@ export default function ConsultoriasConcluidasPage() {
     },
   })
 
-  useEffect(() => {
-    async function fetchData() {
-      setIsLoading(true)
-      try {
-        // Preparar filtros
-        const apiFilters: {
-          startDate?: string
-          endDate?: string
-          consultor?: string
-        } = {}
+  // Função de busca de dados refatorada para ser chamada em diferentes contextos
+  const fetchData = useCallback(async () => {
+    setIsLoading(true)
+    try {
+      // Preparar filtros
+      const apiFilters: {
+        startDate?: string
+        endDate?: string
+        consultor?: string
+      } = {}
 
-        if (filters.dateRange.from) {
-          apiFilters.startDate = format(filters.dateRange.from, "yyyy-MM-dd")
-        }
-        if (filters.dateRange.to) {
-          apiFilters.endDate = format(filters.dateRange.to, "yyyy-MM-dd")
-        }
-        if (filters.consultor !== "todos") {
-          apiFilters.consultor = filters.consultor
-        }
-
-        // Buscar dados
-        const [projectsData, statsData, consultoresData] = await Promise.all([
-          getCompletedConsultingProjects(apiFilters),
-          getCompletedConsultingStats(apiFilters),
-          getCompletedConsultores(),
-        ])
-
-        // Filtrar por tipo se necessário
-        let filteredProjects = projectsData
-        if (filters.tipo !== "todos") {
-          filteredProjects = projectsData.filter((project) => project.tipo.toLowerCase() === filters.tipo.toLowerCase())
-        }
-
-        setProjects(filteredProjects)
-        setStats(statsData)
-        setConsultores(consultoresData)
-      } catch (error) {
-        console.error("Error fetching data:", error)
-      } finally {
-        setIsLoading(false)
+      if (filters.dateRange.from) {
+        apiFilters.startDate = format(filters.dateRange.from, "yyyy-MM-dd")
       }
-    }
+      if (filters.dateRange.to) {
+        apiFilters.endDate = format(filters.dateRange.to, "yyyy-MM-dd")
+      }
+      if (filters.consultor !== "todos") {
+        apiFilters.consultor = filters.consultor
+      }
 
+      console.log("Buscando dados com os filtros:", apiFilters)
+
+      // Buscar dados
+      const [projectsData, statsData, consultoresData] = await Promise.all([
+        getCompletedConsultingProjects(apiFilters),
+        getCompletedConsultingStats(apiFilters),
+        getCompletedConsultores(),
+      ])
+
+      // Filtrar por tipo se necessário
+      let filteredProjects = projectsData
+      if (filters.tipo !== "todos") {
+        filteredProjects = projectsData.filter((project) => project.tipo.toLowerCase() === filters.tipo.toLowerCase())
+      }
+
+      console.log(`Total de projetos encontrados: ${filteredProjects.length}`)
+      setProjects(filteredProjects)
+      setStats(statsData)
+      setConsultores(consultoresData)
+
+      // Mostrar toast de sucesso ao atualizar manualmente
+      if (!isLoading) {
+        toast({
+          title: "Dados atualizados",
+          description: `${filteredProjects.length} consultorias concluídas encontradas.`,
+        })
+      }
+    } catch (error) {
+      console.error("Error fetching data:", error)
+      toast({
+        title: "Erro ao buscar dados",
+        description: "Ocorreu um erro ao carregar as consultorias concluídas.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }, [filters, isLoading])
+
+  // Buscar dados na inicialização
+  useEffect(() => {
     fetchData()
-  }, [filters])
+  }, [fetchData])
 
   const handleExport = () => {
-    const dataToExport = projects.map((project) => ({
-      Cliente: project.cliente,
-      Tipo: project.tipo,
-      Porte: project.porte,
-      Consultor: project.consultor || "Não atribuído",
-      "Data de Início": project.data_inicio,
-      "Data de Término": project.data_termino,
-      "Data de Finalização": project.data_finalizacao,
-      "Duração (dias)": project.tempo_dias,
-      "Valor da Consultoria": project.valor_consultoria,
-      "Valor da Comissão": project.valor_comissao || 0,
-      "Percentual de Comissão": project.percentual_comissao || 0,
-      "Avaliação (Estrelas)": project.avaliacao_estrelas || "N/A",
-      "Prazo Atingido": project.prazo_atingido ? "Sim" : "Não",
-    }))
+    try {
+      if (!projects.length) {
+        toast({
+          title: "Aviso",
+          description: "Não há dados para exportar",
+        })
+        return
+      }
 
-    exportToExcel(dataToExport, "consultorias_concluidas")
+      const dataToExport = projects.map((project) => ({
+        Cliente: project.cliente,
+        Tipo: project.tipo,
+        Porte: project.porte,
+        Consultor: project.consultor || "Não atribuído",
+        "Data de Início": project.data_inicio,
+        "Data de Término": project.data_termino,
+        "Data de Finalização": project.data_finalizacao,
+        "Duração (dias)": project.tempo_dias,
+        "Valor da Consultoria": project.valor_consultoria,
+        "Valor da Comissão": project.valor_comissao || 0,
+        "Percentual de Comissão": project.percentual_comissao || 0,
+        "Avaliação (Estrelas)": project.avaliacao_estrelas || "N/A",
+        "Prazo Atingido": project.prazo_atingido ? "Sim" : "Não",
+      }))
+
+      exportToExcel(dataToExport, "consultorias_concluidas")
+      toast({
+        title: "Sucesso",
+        description: "Dados exportados com sucesso",
+      })
+    } catch (error) {
+      console.error("Error exporting data:", error)
+      toast({
+        title: "Erro",
+        description: "Não foi possível exportar os dados",
+        variant: "destructive",
+      })
+    }
+  }
+
+  // Atualizar manualmente a lista
+  const handleRefresh = () => {
+    fetchData()
   }
 
   return (
@@ -191,6 +236,9 @@ export default function ConsultoriasConcluidasPage() {
             <Button variant="outline" onClick={handleExport}>
               <Download className="mr-2 h-4 w-4" />
               Exportar
+            </Button>
+            <Button variant="outline" size="icon" onClick={handleRefresh}>
+              <RefreshCw className="h-4 w-4" />
             </Button>
           </div>
         </div>
