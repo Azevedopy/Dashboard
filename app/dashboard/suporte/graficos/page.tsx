@@ -55,23 +55,13 @@ export default function GraficosPage() {
   // Efeito para filtrar métricas com base nos atendentes selecionados
   useEffect(() => {
     console.log("=== FILTRO DE MÉTRICAS ===")
-    console.log("Total de métricas recebidas:", metrics.length)
+    console.log("Total de métricas:", metrics.length)
     console.log("Estado dos membros selecionados:", selectedMembers)
 
     if (metrics.length === 0) {
       setFilteredMetrics([])
       return
     }
-
-    // Log detalhado das métricas recebidas
-    metrics.forEach((metric, index) => {
-      console.log(`Métrica ${index}:`, {
-        id: metric.id,
-        date: metric.date,
-        member: metric.member,
-        member_id: metric.member_id,
-      })
-    })
 
     // Se nenhum atendente estiver selecionado, mostrar todos
     const hasSelectedMembers = Object.values(selectedMembers).some((selected) => selected)
@@ -87,21 +77,18 @@ export default function GraficosPage() {
     const filtered = metrics.filter((metric) => {
       const memberName = metric.member || "Desconhecido"
       const isSelected = selectedMembers[memberName]
-      console.log(`Filtro - Membro: ${memberName}, Selecionado: ${isSelected}`)
+      console.log(`Membro: ${memberName}, Selecionado: ${isSelected}`)
       return isSelected
     })
 
-    console.log("Métricas após filtro:", filtered.length)
+    console.log("Métricas filtradas:", filtered.length)
     setFilteredMetrics(filtered)
   }, [metrics, selectedMembers])
 
   const fetchData = async () => {
     setIsLoading(true)
     try {
-      console.log("=== INICIANDO BUSCA DE DADOS ===")
-
       const membersData = await getMembers()
-      console.log("Membros encontrados:", membersData)
       setMembers(membersData)
 
       let startDate
@@ -148,52 +135,56 @@ export default function GraficosPage() {
       }
 
       // Buscar métricas
-      console.log(`Buscando métricas de ${startDate} até ${endDate}`)
       debugText += `Buscando métricas de ${startDate} até ${endDate}\n`
-
       const metricsData = await getMetrics(startDate, endDate)
-      console.log("Métricas brutas recebidas:", metricsData)
       debugText += `Métricas recebidas: ${metricsData.length}\n`
 
-      // Log detalhado dos member_ids únicos encontrados
-      const uniqueMemberIds = Array.from(new Set(metricsData.map((m) => m.member_id)))
-      console.log("Member IDs únicos encontrados:", uniqueMemberIds)
-      debugText += `Member IDs únicos: ${uniqueMemberIds.join(", ")}\n`
+      // Adicionar log para verificar os dados do Emerson
+      const emersonMetrics = metricsData.filter((m) => {
+        const member = membersData.find((mem) => mem.id === m.member_id)
+        return member?.name === "Emerson"
+      })
+
+      if (emersonMetrics.length > 0) {
+        debugText += `\nMétricas do Emerson:\n`
+        emersonMetrics.forEach((m) => {
+          debugText += `Data: ${m.date}, Tempo médio: ${m.average_response_time}\n`
+        })
+      }
 
       // Adicionar nome do membro a cada métrica
       const metricsWithMemberNames = metricsData.map((metric) => {
         const member = membersData.find((m) => m.id === metric.member_id)
-        console.log(`Mapeando member_id ${metric.member_id} para membro:`, member)
         return {
           ...metric,
           member: member?.name || "Desconhecido",
         }
       })
 
-      // Log dos membros mapeados
-      const uniqueMembersFound = Array.from(
-        new Set(metricsWithMemberNames.map((item) => item.member || "Desconhecido")),
-      )
-      console.log("Membros únicos após mapeamento:", uniqueMembersFound)
-      debugText += `Membros encontrados: ${uniqueMembersFound.join(", ")}\n`
-
       // Adicionar informações sobre as datas das métricas para debug
       if (metricsWithMemberNames.length > 0) {
         const dates = metricsWithMemberNames.map((m) => m.date).sort()
         debugText += `Datas das métricas: ${dates.join(", ")}\n`
+
+        // Log dos membros únicos encontrados
+        const uniqueMembersFound = Array.from(
+          new Set(metricsWithMemberNames.map((item) => item.member || "Desconhecido")),
+        )
+        debugText += `Membros encontrados: ${uniqueMembersFound.join(", ")}\n`
       }
 
       setDebugInfo(debugText)
       setMetrics(metricsWithMemberNames)
 
       // Inicializar o estado de seleção de membros - TODOS selecionados por padrão
-      console.log("Inicializando estado dos membros...")
+      const uniqueMembers = Array.from(new Set(metricsWithMemberNames.map((item) => item.member || "Desconhecido")))
+
+      console.log("Membros únicos encontrados:", uniqueMembers)
 
       // Sempre inicializar com TODOS os membros selecionados
       const initialMemberState = {}
-      uniqueMembersFound.forEach((member) => {
+      uniqueMembers.forEach((member) => {
         initialMemberState[member] = true
-        console.log(`Inicializando membro ${member} como selecionado`)
       })
 
       console.log("Estado inicial dos membros:", initialMemberState)
@@ -226,79 +217,38 @@ export default function GraficosPage() {
   }
 
   const handleCustomDateFilter = () => {
-    try {
-      // Validar se as datas estão definidas
-      if (!dateRange.from || !dateRange.to) {
-        toast({
-          title: "Erro de validação",
-          description: "Por favor, selecione um período válido.",
-          variant: "destructive",
+    setPeriod("custom")
+    setIsCalendarOpen(false)
+
+    // Usar as datas selecionadas no calendário para filtrar
+    const startDate = format(dateRange.from, "yyyy-MM-dd")
+    const endDate = format(dateRange.to, "yyyy-MM-dd")
+
+    setIsLoading(true)
+    getMetrics(startDate, endDate)
+      .then((metricsData) => {
+        // Adicionar nome do membro a cada métrica
+        const metricsWithMemberNames = metricsData.map((metric) => {
+          const member = members.find((m) => m.id === metric.member_id)
+          return {
+            ...metric,
+            member: member?.name || "Desconhecido",
+          }
         })
-        return
-      }
 
-      // Validar se as datas são válidas
-      if (isNaN(dateRange.from.getTime()) || isNaN(dateRange.to.getTime())) {
-        toast({
-          title: "Erro de validação",
-          description: "As datas selecionadas são inválidas.",
-          variant: "destructive",
-        })
-        return
-      }
-
-      setPeriod("custom")
-      setIsCalendarOpen(false)
-
-      // Usar as datas selecionadas no calendário para filtrar
-      const startDate = format(dateRange.from, "yyyy-MM-dd")
-      const endDate = format(dateRange.to, "yyyy-MM-dd")
-
-      console.log(`Aplicando filtro customizado: ${startDate} até ${endDate}`)
-
-      setIsLoading(true)
-      getMetrics(startDate, endDate)
-        .then((metricsData) => {
-          // Adicionar nome do membro a cada métrica
-          const metricsWithMemberNames = metricsData.map((metric) => {
-            const member = members.find((m) => m.id === metric.member_id)
-            return {
-              ...metric,
-              member: member?.name || "Desconhecido",
-            }
-          })
-
-          setMetrics(metricsWithMemberNames)
-
-          // Atualizar estado dos membros selecionados
-          const uniqueMembersFound = Array.from(
-            new Set(metricsWithMemberNames.map((item) => item.member || "Desconhecido")),
-          )
-          const initialMemberState = {}
-          uniqueMembersFound.forEach((member) => {
-            initialMemberState[member] = true
-          })
-          setSelectedMembers(initialMemberState)
-        })
-        .catch((error) => {
-          console.error("Error fetching data:", error)
-          toast({
-            title: "Erro ao carregar dados",
-            description: "Não foi possível carregar os dados. Tente novamente mais tarde.",
-            variant: "destructive",
-          })
-        })
-        .finally(() => {
-          setIsLoading(false)
-        })
-    } catch (error) {
-      console.error("Error in handleCustomDateFilter:", error)
-      toast({
-        title: "Erro inesperado",
-        description: "Ocorreu um erro ao aplicar o filtro de data.",
-        variant: "destructive",
+        setMetrics(metricsWithMemberNames)
       })
-    }
+      .catch((error) => {
+        console.error("Error fetching data:", error)
+        toast({
+          title: "Erro ao carregar dados",
+          description: "Não foi possível carregar os dados. Tente novamente mais tarde.",
+          variant: "destructive",
+        })
+      })
+      .finally(() => {
+        setIsLoading(false)
+      })
   }
 
   // Determinar o tipo de gráfico com base na métrica selecionada
@@ -438,20 +388,6 @@ export default function GraficosPage() {
     }
   }
 
-  // Função para formatar a exibição do período selecionado
-  const formatDateRange = () => {
-    try {
-      if (dateRange.from && dateRange.to) {
-        return `${format(dateRange.from, "dd/MM/yyyy", { locale: ptBR })} - ${format(dateRange.to, "dd/MM/yyyy", { locale: ptBR })}`
-      } else if (dateRange.from) {
-        return format(dateRange.from, "dd/MM/yyyy", { locale: ptBR })
-      }
-      return "Selecione um período"
-    } catch (error) {
-      return "Período inválido"
-    }
-  }
-
   return (
     <div className="flex flex-col h-full">
       <div className="p-6 bg-[#0056D6] text-white">
@@ -460,33 +396,6 @@ export default function GraficosPage() {
       </div>
 
       <div className="p-6 space-y-6">
-        {/* Card de Debug */}
-        <Card className="border-yellow-200 bg-yellow-50">
-          <CardHeader>
-            <CardTitle className="text-yellow-800">Debug - Informações dos Dados</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2 text-sm">
-              <p>
-                <strong>Total de métricas:</strong> {metrics.length}
-              </p>
-              <p>
-                <strong>Métricas filtradas:</strong> {filteredMetrics.length}
-              </p>
-              <p>
-                <strong>Membros disponíveis:</strong> {Object.keys(selectedMembers).join(", ")}
-              </p>
-              <p>
-                <strong>Membros selecionados:</strong>{" "}
-                {Object.entries(selectedMembers)
-                  .filter(([_, selected]) => selected)
-                  .map(([name]) => name)
-                  .join(", ")}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-
         <Card>
           <CardHeader>
             <div className="flex justify-between items-center">
@@ -637,28 +546,30 @@ export default function GraficosPage() {
                   <PopoverTrigger asChild>
                     <Button variant="outline" className="w-full justify-start text-left font-normal">
                       <CalendarIcon className="mr-2 h-4 w-4" />
-                      {formatDateRange()}
+                      {dateRange.from ? (
+                        dateRange.to ? (
+                          <>
+                            {format(dateRange.from, "dd/MM/yyyy", { locale: ptBR })} -{" "}
+                            {format(dateRange.to, "dd/MM/yyyy", { locale: ptBR })}
+                          </>
+                        ) : (
+                          format(dateRange.from, "dd/MM/yyyy", { locale: ptBR })
+                        )
+                      ) : (
+                        "Selecione um período"
+                      )}
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-auto p-0" align="start">
                     <Calendar
                       mode="range"
                       selected={dateRange}
-                      onSelect={(range) => {
-                        if (range) {
-                          setDateRange(range)
-                        }
-                      }}
+                      onSelect={(range) => setDateRange(range || { from: undefined, to: undefined })}
                       locale={ptBR}
                       initialFocus
                     />
                     <div className="p-3 border-t border-border">
-                      <Button
-                        size="sm"
-                        className="w-full"
-                        onClick={handleCustomDateFilter}
-                        disabled={!dateRange.from || !dateRange.to}
-                      >
+                      <Button size="sm" className="w-full" onClick={handleCustomDateFilter}>
                         Aplicar Filtro
                       </Button>
                     </div>
@@ -834,7 +745,10 @@ export default function GraficosPage() {
               // Modo de visualização resumida
               <div className="text-center py-8">
                 <p>Clique em "Gerenciar Métricas" para visualizar e editar as métricas disponíveis.</p>
-                <p className="text-sm text-muted-foreground mt-2">Período: {formatDateRange()}</p>
+                <p className="text-sm text-muted-foreground mt-2">
+                  Período: {dateRange.from ? format(dateRange.from, "dd/MM/yyyy", { locale: ptBR }) : "N/A"} até{" "}
+                  {dateRange.to ? format(dateRange.to, "dd/MM/yyyy", { locale: ptBR }) : "N/A"}
+                </p>
               </div>
             )}
           </CardContent>
