@@ -195,25 +195,35 @@ export async function getConsultingStats(
   }
 }
 
-// Function to get unique consultant names
+// Function to get unique consultant names - CORRIGIDA
 export async function getConsultores(): Promise<string[]> {
   try {
+    console.log("🔍 Buscando consultores...")
     const supabase = getSupabase()
-    const { data, error } = await supabase.from("metrics_consultoria").select("consultor").order("consultor")
+
+    // Buscar todos os consultores únicos da tabela metrics_consultoria
+    const { data, error } = await supabase
+      .from("metrics_consultoria")
+      .select("consultor")
+      .not("consultor", "is", null)
+      .order("consultor")
 
     if (error) {
-      console.error("Error fetching consultores:", error)
+      console.error("❌ Erro ao buscar consultores:", error)
       return []
     }
 
-    // Extract unique consultant names
-    const consultores = [...new Set(data.map((item) => item.consultor))]
-      .filter(Boolean) // Remove null or undefined values
-      .sort() // Sort alphabetically
+    console.log("📊 Dados brutos de consultores:", data)
 
+    // Extrair nomes únicos de consultores
+    const consultores = [...new Set(data.map((item) => item.consultor))]
+      .filter(Boolean) // Remove valores null, undefined ou vazios
+      .sort() // Ordena alfabeticamente
+
+    console.log("✅ Consultores únicos encontrados:", consultores)
     return consultores
   } catch (error) {
-    console.error("Unexpected error fetching consultores:", error)
+    console.error("❌ Erro inesperado ao buscar consultores:", error)
     return []
   }
 }

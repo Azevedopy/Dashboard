@@ -17,7 +17,7 @@ import { Calendar } from "@/components/ui/calendar"
 import { cn } from "@/lib/utils"
 import { toast } from "@/components/ui/use-toast"
 import { createConsultingMetric, getConsultores } from "@/lib/consulting-service"
-import { getMembersByService } from "@/lib/members-service"
+import { getMembersByService, getAllMembers } from "@/lib/members-service"
 
 export default function ConsultingMetricsForm() {
   const router = useRouter()
@@ -54,57 +54,98 @@ export default function ConsultingMetricsForm() {
     { value: "enterprise", label: "Enterprise" },
   ]
 
-  // Buscar consultores do sistema
+  // Buscar consultores do sistema - CORRIGIDO
   useEffect(() => {
     async function fetchConsultants() {
       try {
         setIsLoadingConsultants(true)
+        console.log("🔍 Iniciando busca de consultores...")
 
-        // Agora podemos usar getMembersByService já que a coluna service_type existe
-        const members = await getMembersByService("consultoria")
+        let consultorsList: { id: string; name: string }[] = []
 
-        if (members && members.length > 0) {
-          console.log("Consultores encontrados pelo service_type:", members)
-          setConsultants(
-            members.map((member) => ({
+        // Estratégia 1: Buscar todos os membros
+        console.log("📋 Tentativa 1: Buscando todos os membros...")
+        const allMembers = await getAllMembers()
+        console.log("👥 Todos os membros encontrados:", allMembers)
+
+        if (allMembers && allMembers.length > 0) {
+          consultorsList = allMembers.map((member) => ({
+            id: member.id,
+            name: member.name,
+          }))
+          console.log("✅ Usando todos os membros como consultores:", consultorsList)
+        }
+
+        // Estratégia 2: Se não encontrou membros, buscar por service_type
+        if (consultorsList.length === 0) {
+          console.log("📋 Tentativa 2: Buscando membros por service_type 'consultoria'...")
+          const consultingMembers = await getMembersByService("consultoria")
+          console.log("👨‍💼 Membros de consultoria encontrados:", consultingMembers)
+
+          if (consultingMembers && consultingMembers.length > 0) {
+            consultorsList = consultingMembers.map((member) => ({
               id: member.id,
               name: member.name,
-            })),
-          )
-        } else {
-          // Fallback: buscar consultores da tabela de métricas
-          const consultores = await getConsultores()
-          console.log("Consultores encontrados pelo getConsultores:", consultores)
-
-          if (consultores && consultores.length > 0) {
-            setConsultants(
-              consultores.map((name, index) => ({
-                id: `consultant-${index}`,
-                name,
-              })),
-            )
-          } else {
-            // Dados de exemplo como último recurso
-            setConsultants([
-              { id: "1", name: "José Vogel" },
-              { id: "2", name: "Maria Silva" },
-              { id: "3", name: "Carlos Santos" },
-            ])
+            }))
+            console.log("✅ Usando membros de consultoria:", consultorsList)
           }
         }
+
+        // Estratégia 3: Buscar consultores da tabela de métricas
+        if (consultorsList.length === 0) {
+          console.log("📋 Tentativa 3: Buscando consultores da tabela de métricas...")
+          const consultoresFromMetrics = await getConsultores()
+          console.log("📊 Consultores das métricas:", consultoresFromMetrics)
+
+          if (consultoresFromMetrics && consultoresFromMetrics.length > 0) {
+            consultorsList = consultoresFromMetrics.map((name, index) => ({
+              id: `consultant-${index}`,
+              name,
+            }))
+            console.log("✅ Usando consultores das métricas:", consultorsList)
+          }
+        }
+
+        // Estratégia 4: Lista padrão como último recurso
+        if (consultorsList.length === 0) {
+          console.log("⚠️ Nenhum consultor encontrado, usando lista padrão...")
+          consultorsList = [
+            { id: "1", name: "José Vogel" },
+            { id: "2", name: "Maria Silva" },
+            { id: "3", name: "Carlos Santos" },
+            { id: "4", name: "Ana Costa" },
+            { id: "5", name: "Pedro Oliveira" },
+          ]
+          console.log("📝 Lista padrão de consultores:", consultorsList)
+
+          toast({
+            title: "Aviso",
+            description: "Usando lista padrão de consultores. Verifique se há membros cadastrados no sistema.",
+            variant: "warning",
+          })
+        }
+
+        setConsultants(consultorsList)
+        console.log("🎯 Consultores finais definidos:", consultorsList)
       } catch (error) {
-        console.error("Erro ao buscar consultores:", error)
-        // Dados de exemplo em caso de erro
-        setConsultants([
+        console.error("❌ Erro ao buscar consultores:", error)
+
+        // Lista de emergência
+        const emergencyList = [
           { id: "1", name: "José Vogel" },
           { id: "2", name: "Maria Silva" },
           { id: "3", name: "Carlos Santos" },
-        ])
+          { id: "4", name: "Ana Costa" },
+          { id: "5", name: "Pedro Oliveira" },
+        ]
+
+        setConsultants(emergencyList)
+        console.log("🚨 Usando lista de emergência:", emergencyList)
 
         toast({
-          title: "Aviso",
-          description: "Usando lista padrão de consultores devido a um erro ao carregar dados.",
-          variant: "warning",
+          title: "Erro",
+          description: "Erro ao carregar consultores. Usando lista padrão.",
+          variant: "destructive",
         })
       } finally {
         setIsLoadingConsultants(false)
@@ -168,6 +209,13 @@ export default function ConsultingMetricsForm() {
       const consultant = consultants.find((c) => c.id === memberId)
       const consultorName = consultant ? consultant.name : ""
 
+      console.log("📝 Dados do formulário:", {
+        consultant,
+        consultorName,
+        memberId,
+        consultants,
+      })
+
       const result = await createConsultingMetric({
         date: new Date().toISOString().split("T")[0], // Data atual
         member_id: "", // Removido o member_id, pois não existe na tabela
@@ -190,7 +238,7 @@ export default function ConsultingMetricsForm() {
       if (result.success) {
         toast({
           title: "Projeto cadastrado com sucesso",
-          description: `O projeto de consultoria foi cadastrado.`,
+          description: `O projeto de consultoria foi cadastrado para ${consultorName}.`,
         })
 
         // Redirect to dashboard
@@ -267,7 +315,9 @@ export default function ConsultingMetricsForm() {
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-medium">Consultor</label>
+                <label className="text-sm font-medium">
+                  Consultor {isLoadingConsultants && <span className="text-xs">(Carregando...)</span>}
+                </label>
                 <Select onValueChange={setMemberId} disabled={isLoadingConsultants}>
                   <SelectTrigger className={errors.memberId ? "border-red-500" : ""}>
                     <SelectValue

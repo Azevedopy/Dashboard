@@ -22,6 +22,19 @@ export async function getMembers(): Promise<Member[]> {
   }
 }
 
+// Buscar todos os membros (alias para getMembers para compatibilidade)
+export async function getAllMembers(): Promise<Member[]> {
+  try {
+    console.log("🔍 getAllMembers: Buscando todos os membros...")
+    const members = await getMembers()
+    console.log(`📋 getAllMembers: Encontrados ${members.length} membros:`, members)
+    return members
+  } catch (error) {
+    console.error("❌ getAllMembers: Erro ao buscar membros:", error)
+    return []
+  }
+}
+
 // Buscar membro por ID
 export async function getMemberById(id: string): Promise<Member | null> {
   try {
