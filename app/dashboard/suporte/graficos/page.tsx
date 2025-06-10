@@ -1,5 +1,7 @@
 "use client"
 
+import { Skeleton } from "@/components/ui/skeleton"
+
 import { useState, useEffect } from "react"
 import { format, subDays, startOfMonth } from "date-fns"
 import { ptBR } from "date-fns/locale"
@@ -18,6 +20,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { getMembers, getMetrics } from "@/lib/data-service"
 import { MetricsPieChart } from "@/components/dashboard/metrics-pie-chart"
 import { MetricsLineChart } from "@/components/dashboard/metrics-line-chart"
+import { MetricsBarChart } from "@/components/dashboard/metrics-bar-chart"
 import { toast } from "@/components/ui/use-toast"
 import { Toaster } from "@/components/ui/toaster"
 import { EditMetricDialog } from "@/components/metrics/edit-metric-dialog"
@@ -287,6 +290,8 @@ export default function GraficosPage() {
   useEffect(() => {
     if (selectedMetric === "average_response_time" || selectedMetric === "resolution_rate") {
       setChartType("line")
+    } else if (selectedMetric === "evaluated_percentage" || selectedMetric === "csat_score") {
+      setChartType("bar")
     } else {
       setChartType("pie")
     }
@@ -317,6 +322,22 @@ export default function GraficosPage() {
           yAxisFormatter: (value) => `${value}%`,
           tooltipFormatter: (value) => `${value.toFixed(1)}%`,
           domain: [0, 100],
+        }
+      case "evaluated_percentage":
+        return {
+          referenceValue: 30, // Meta alterada para 30%
+          referenceLabel: "Meta: 30%",
+          yAxisFormatter: (value) => `${value}%`,
+          tooltipFormatter: (value) => `${value.toFixed(1)}%`,
+          domain: [0, 100],
+        }
+      case "csat_score":
+        return {
+          referenceValue: 4.5,
+          referenceLabel: "Meta: 4.5",
+          yAxisFormatter: (value) => `${value.toFixed(1)}`,
+          tooltipFormatter: (value) => `${value.toFixed(2)}`,
+          domain: [1, 5], // Escala de 1 a 5
         }
       default:
         return {}
@@ -444,6 +465,113 @@ export default function GraficosPage() {
       default:
         return "Período selecionado"
     }
+  }
+
+  // Função para renderizar o tipo de gráfico correto com base na métrica
+  const renderChart = () => {
+    if (isLoading) {
+      return (
+        <div className="flex items-center justify-center h-full">
+          <Skeleton className="h-[300px] w-full" />
+        </div>
+      )
+    }
+
+    if (filteredMetrics.length === 0) {
+      return (
+        <div className="flex items-center justify-center h-full">
+          <p className="text-gray-500">Nenhum dado disponível para exibição</p>
+        </div>
+      )
+    }
+
+    switch (chartType) {
+      case "line":
+        return (
+          <MetricsLineChart
+            metrics={filteredMetrics}
+            isLoading={isLoading}
+            metricType={selectedMetric}
+            referenceValue={metricConfig.referenceValue}
+            referenceLabel={metricConfig.referenceLabel}
+            yAxisFormatter={metricConfig.yAxisFormatter}
+            tooltipFormatter={metricConfig.tooltipFormatter}
+            domain={metricConfig.domain}
+            onMemberToggle={handleMemberToggle}
+          />
+        )
+      case "bar":
+        return (
+          <MetricsBarChart
+            metrics={filteredMetrics}
+            isLoading={isLoading}
+            metricType={selectedMetric}
+            referenceValue={metricConfig.referenceValue}
+            referenceLabel={metricConfig.referenceLabel}
+            yAxisFormatter={metricConfig.yAxisFormatter}
+            tooltipFormatter={metricConfig.tooltipFormatter}
+            domain={metricConfig.domain}
+            onMemberToggle={handleMemberToggle}
+          />
+        )
+      case "pie":
+      default:
+        return (
+          <MetricsPieChart
+            metrics={filteredMetrics}
+            isLoading={isLoading}
+            metricType={selectedMetric}
+            onMemberToggle={handleMemberToggle}
+          />
+        )
+    }
+  }
+
+  // Função para obter o título do gráfico com base na métrica
+  const getChartTitle = () => {
+    switch (selectedMetric) {
+      case "average_response_time":
+        return "Tempo Médio de Resposta"
+      case "resolution_rate":
+        return "Taxa de Resolução"
+      case "evaluated_percentage":
+        return "Percentual de Avaliações"
+      case "csat_score":
+        return "Pontuação CSAT"
+      default:
+        return "Comparação por Atendente"
+    }
+  }
+
+  // Função para obter a descrição do gráfico com base na métrica
+  const getChartDescription = () => {
+    const baseDescription = metricOptions.find((option) => option.value === selectedMetric)?.label || selectedMetric
+
+    let typeDescription = ""
+    if (chartType === "line") {
+      typeDescription = " ao longo do tempo"
+    } else if (chartType === "bar") {
+      if (selectedMetric === "evaluated_percentage" || selectedMetric === "csat_score") {
+        typeDescription = " por agente"
+      } else {
+        typeDescription = " por dia (últimos 30 dias)"
+      }
+    } else {
+      typeDescription = " médio por atendente"
+    }
+
+    return (
+      <>
+        {baseDescription}
+        {typeDescription}
+        {selectedCount < totalMembers && (
+          <span className="ml-2">
+            (Filtrado: {selectedCount} de {totalMembers} atendentes)
+          </span>
+        )}
+        <span className="ml-2 text-muted-foreground">• {getCurrentPeriodText()}</span>
+      </>
+    )
   }
 
   return (
@@ -641,48 +769,10 @@ export default function GraficosPage() {
         {/* Renderizar o tipo de gráfico apropriado com base na métrica selecionada */}
         <Card>
           <CardHeader>
-            <CardTitle>
-              {selectedMetric === "average_response_time"
-                ? "Tempo Médio de Resposta"
-                : selectedMetric === "resolution_rate"
-                  ? "Taxa de Resolução"
-                  : "Comparação por Atendente"}
-            </CardTitle>
-            <CardDescription>
-              {metricOptions.find((option) => option.value === selectedMetric)?.label || selectedMetric}
-              {selectedMetric === "average_response_time" || selectedMetric === "resolution_rate"
-                ? " ao longo do tempo"
-                : " médio por atendente"}
-              {selectedCount < totalMembers && (
-                <span className="ml-2">
-                  (Filtrado: {selectedCount} de {totalMembers} atendentes)
-                </span>
-              )}
-              <span className="ml-2 text-muted-foreground">• {getCurrentPeriodText()}</span>
-            </CardDescription>
+            <CardTitle>{getChartTitle()}</CardTitle>
+            <CardDescription>{getChartDescription()}</CardDescription>
           </CardHeader>
-          <CardContent className="h-[400px]">
-            {selectedMetric === "average_response_time" || selectedMetric === "resolution_rate" ? (
-              <MetricsLineChart
-                metrics={filteredMetrics}
-                isLoading={isLoading}
-                metricType={selectedMetric}
-                referenceValue={metricConfig.referenceValue}
-                referenceLabel={metricConfig.referenceLabel}
-                yAxisFormatter={metricConfig.yAxisFormatter}
-                tooltipFormatter={metricConfig.tooltipFormatter}
-                domain={metricConfig.domain}
-                onMemberToggle={handleMemberToggle}
-              />
-            ) : (
-              <MetricsPieChart
-                metrics={filteredMetrics}
-                isLoading={isLoading}
-                metricType={selectedMetric}
-                onMemberToggle={handleMemberToggle}
-              />
-            )}
-          </CardContent>
+          <CardContent className="h-[400px]">{renderChart()}</CardContent>
         </Card>
 
         {/* Gerenciamento de métricas */}

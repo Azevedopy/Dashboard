@@ -16,25 +16,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { useResizeObserver } from "@/hooks/use-resize-observer"
 import { format, parseISO } from "date-fns"
 import { ptBR } from "date-fns/locale"
-
-// Array de cores para as linhas dos diferentes membros
-const COLORS = [
-  "#8884d8",
-  "#82ca9d",
-  "#ffc658",
-  "#ff8042",
-  "#0088fe",
-  "#00C49F",
-  "#FFBB28",
-  "#FF8042",
-  "#a4de6c",
-  "#d0ed57",
-  "#83a6ed",
-  "#8dd1e1",
-  "#a4262c",
-  "#ca5010",
-  "#8764b8",
-]
+import { getAgentColor } from "@/lib/agent-colors"
 
 // Função para formatar minutos para exibição
 const formatMinutes = (minutes: number): string => {
@@ -264,14 +246,14 @@ export function MetricsLineChart({
           />
           <Legend content={<CustomLegend />} />
 
-          {/* Renderizar uma linha para cada membro */}
-          {uniqueMembers.map((member, index) => (
+          {/* Renderizar uma linha para cada membro com cores fixas */}
+          {uniqueMembers.map((member) => (
             <Line
               key={member}
               type="monotone"
               dataKey={member}
               name={member}
-              stroke={COLORS[index % COLORS.length]}
+              stroke={getAgentColor(member)}
               strokeWidth={2}
               activeDot={{ r: 6 }}
               connectNulls
