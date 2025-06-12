@@ -33,9 +33,8 @@ export default function ConsultingMetricsForm() {
   const [sizeDetail, setSizeDetail] = useState("")
   const [startDate, setStartDate] = useState<Date | undefined>(undefined)
   const [endDate, setEndDate] = useState<Date | undefined>(undefined)
-  const [duration, setDuration] = useState(15)
-  const [closingDate, setClosingDate] = useState<Date | undefined>(undefined)
-  const [turningDate, setTurningDate] = useState<Date | undefined>(undefined)
+  const [duration, setDuration] = useState(0)
+  const [netProjectValue, setNetProjectValue] = useState(0)
   const [consultingValue, setConsultingValue] = useState(0)
   const [bonus8Percent, setBonus8Percent] = useState(0)
   const [bonus12Percent, setBonus12Percent] = useState(0)
@@ -161,11 +160,48 @@ export default function ConsultingMetricsForm() {
     fetchConsultants()
   }, [])
 
-  // Usar useEffect para calcular os bônus quando o valor da consultoria mudar
+  // Usar useEffect para calcular os bônus automaticamente
   useEffect(() => {
     setBonus8Percent(consultingValue * 0.08)
     setBonus12Percent(consultingValue * 0.12)
   }, [consultingValue])
+
+  // UseEffect para obter o limite de dias baseado no porte
+  const getPorteLimit = (porteValue: string): number => {
+    const porteLimits = {
+      basic: 15,
+      starter: 25,
+      pro: 40,
+      enterprise: 60,
+    }
+    return porteLimits[porteValue as keyof typeof porteLimits] || 0
+  }
+
+  // UseEffect para calcular a duração entre as datas
+  useEffect(() => {
+    if (startDate && endDate) {
+      const timeDiff = endDate.getTime() - startDate.getTime()
+      const daysDiff = Math.ceil(timeDiff / (1000 * 3600 * 24))
+      setDuration(Math.max(0, daysDiff))
+    } else {
+      setDuration(0)
+    }
+  }, [startDate, endDate])
+
+  // Função para calcular informações do projeto
+  const calculateProjectInfo = () => {
+    const porteLimit = getPorteLimit(size)
+    const daysUsed = duration
+    const isWithinLimit = daysUsed <= porteLimit && daysUsed > 0
+
+    return {
+      daysUsed,
+      porteLimit,
+      isWithinLimit,
+    }
+  }
+
+  const projectInfo = calculateProjectInfo()
 
   // Função para validar o formulário
   const validateForm = () => {
@@ -178,7 +214,7 @@ export default function ConsultingMetricsForm() {
     if (!size) newErrors.size = "Porte é obrigatório"
     if (!startDate) newErrors.startDate = "Data de início é obrigatória"
     if (!endDate) newErrors.endDate = "Data de término é obrigatória"
-    if (duration <= 0) newErrors.duration = "Duração deve ser maior que 0"
+    if (netProjectValue <= 0) newErrors.netProjectValue = "Valor líquido deve ser maior que zero"
 
     // Validar se a data de término é posterior à data de início
     if (startDate && endDate && startDate > endDate) {
@@ -228,8 +264,6 @@ export default function ConsultingMetricsForm() {
       // Format dates to YYYY-MM-DD
       const formattedStartDate = startDate ? format(startDate, "yyyy-MM-dd") : ""
       const formattedEndDate = endDate ? format(endDate, "yyyy-MM-dd") : ""
-      const formattedClosingDate = closingDate ? format(closingDate, "yyyy-MM-dd") : null
-      const formattedTurningDate = turningDate ? format(turningDate, "yyyy-MM-dd") : null
 
       // Encontrar o nome do consultor pelo ID
       const consultant = consultants.find((c) => c.id === memberId)
@@ -265,11 +299,10 @@ export default function ConsultingMetricsForm() {
         start_date: formattedStartDate,
         end_date: formattedEndDate,
         duration: duration,
-        closing_date: formattedClosingDate,
-        turning_date: formattedTurningDate,
         consulting_value: consultingValue,
         bonus_8_percent: bonus8Percent,
         bonus_12_percent: bonus12Percent,
+        valor_liquido_projeto: netProjectValue,
       })
 
       if (result.success) {
@@ -370,9 +403,7 @@ Valor enviado para tipo: "${projectType}"`
                   </SelectContent>
                 </Select>
                 {errors.projectType && <p className="text-sm text-red-500">{errors.projectType}</p>}
-                <div className="text-xs text-muted-foreground">
-                  <p>✅ Valores aceitos: Consultoria, Upsell</p>
-                </div>
+                <div className="text-xs text-muted-foreground"></div>
               </div>
 
               <div className="space-y-2">
@@ -426,18 +457,6 @@ Valor enviado para tipo: "${projectType}"`
                   </SelectContent>
                 </Select>
                 {errors.size && <p className="text-sm text-red-500">{errors.size}</p>}
-                <div className="text-xs text-muted-foreground">
-                  <p>✅ Valores aceitos: basic, starter, pro, enterprise</p>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Porte Detalhado</label>
-                <Input
-                  value={sizeDetail}
-                  onChange={(e) => setSizeDetail(e.target.value)}
-                  placeholder="Detalhes adicionais sobre o porte"
-                />
               </div>
             </div>
           </CardContent>
@@ -509,72 +528,43 @@ Valor enviado para tipo: "${projectType}"`
                 {errors.endDate && <p className="text-sm text-red-500">{errors.endDate}</p>}
               </div>
 
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Duração (dias)</label>
-                <Input
-                  type="number"
-                  min="1"
-                  value={duration}
-                  onChange={(e) => setDuration(Number.parseInt(e.target.value) || 0)}
-                  className={errors.duration ? "border-red-500" : ""}
-                />
-                {errors.duration && <p className="text-sm text-red-500">{errors.duration}</p>}
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Data de Fechamento</label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant={"outline"}
-                      className={cn("w-full pl-3 text-left font-normal", !closingDate && "text-muted-foreground")}
-                    >
-                      {closingDate ? (
-                        format(closingDate, "dd/MM/yyyy", { locale: ptBR })
-                      ) : (
-                        <span>Selecione uma data</span>
-                      )}
-                      <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      mode="single"
-                      selected={closingDate}
-                      onSelect={setClosingDate}
-                      disabled={(date) => date > new Date("2030-01-01") || date < new Date("2020-01-01")}
-                      initialFocus
-                    />
-                  </PopoverContent>
-                </Popover>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Data de Virada</label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant={"outline"}
-                      className={cn("w-full pl-3 text-left font-normal", !turningDate && "text-muted-foreground")}
-                    >
-                      {turningDate ? (
-                        format(turningDate, "dd/MM/yyyy", { locale: ptBR })
-                      ) : (
-                        <span>Selecione uma data</span>
-                      )}
-                      <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      mode="single"
-                      selected={turningDate}
-                      onSelect={setTurningDate}
-                      disabled={(date) => date > new Date("2030-01-01") || date < new Date("2020-01-01")}
-                      initialFocus
-                    />
-                  </PopoverContent>
-                </Popover>
+              <div className="md:col-span-2 space-y-4">
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <h3 className="text-sm font-medium text-blue-900 mb-3">Informações do Projeto</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                    <div>
+                      <span className="text-blue-700 font-medium">Dias utilizados:</span>
+                      <p
+                        className={`text-lg font-bold ${projectInfo.isWithinLimit ? "text-green-600" : "text-red-600"}`}
+                      >
+                        {projectInfo.daysUsed} dias
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-blue-700 font-medium">Limite do porte:</span>
+                      <p className="text-lg font-bold text-blue-600">{projectInfo.porteLimit} dias</p>
+                    </div>
+                    <div>
+                      <span className="text-blue-700 font-medium">Status:</span>
+                      <p className="text-lg font-bold">
+                        {projectInfo.daysUsed > 0 ? (
+                          projectInfo.isWithinLimit ? (
+                            <span className="text-green-600">Dentro do prazo</span>
+                          ) : (
+                            <span className="text-red-600">Excedido</span>
+                          )
+                        ) : (
+                          <span className="text-gray-500">Não calculado</span>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                  {projectInfo.daysUsed > 0 && !projectInfo.isWithinLimit && (
+                    <div className="mt-3 text-xs text-red-600">
+                      ⚠️ Excedeu o prazo permitido em {projectInfo.daysUsed - projectInfo.porteLimit} dias
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </CardContent>
@@ -587,7 +577,7 @@ Valor enviado para tipo: "${projectType}"`
               <p className="text-sm text-muted-foreground">Dados financeiros do projeto</p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               <div className="space-y-2">
                 <label className="text-sm font-medium">Valor da Consultoria (R$)</label>
                 <Input
@@ -597,12 +587,6 @@ Valor enviado para tipo: "${projectType}"`
                   value={consultingValue}
                   onChange={(e) => setConsultingValue(Number.parseFloat(e.target.value) || 0)}
                 />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Bônus (8%)</label>
-                <Input type="text" value={`R$ ${bonus8Percent.toFixed(2)}`} disabled />
-                <p className="text-xs text-muted-foreground">Valor calculado como 8% do valor da consultoria</p>
               </div>
 
               <div className="space-y-2">
