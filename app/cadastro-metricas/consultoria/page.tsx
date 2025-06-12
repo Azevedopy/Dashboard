@@ -46,12 +46,18 @@ export default function ConsultingMetricsForm() {
   // Estado para consultores
   const [consultants, setConsultants] = useState<{ id: string; name: string }[]>([])
 
-  // Definir os portes conforme a estrutura existente
+  // Definir os portes conforme solicitado - mantendo o formato original
   const portes = [
     { value: "basic", label: "Basic" },
     { value: "starter", label: "Starter" },
     { value: "pro", label: "Pro" },
     { value: "enterprise", label: "Enterprise" },
+  ]
+
+  // Definir os tipos conforme os dados existentes no banco
+  const tipos = [
+    { value: "Consultoria", label: "Consultoria" },
+    { value: "Upsell", label: "Upsell" },
   ]
 
   // Buscar consultores do sistema - CORRIGIDO
@@ -179,6 +185,18 @@ export default function ConsultingMetricsForm() {
       newErrors.endDate = "A data de término deve ser posterior à data de início"
     }
 
+    // Validar se o porte está nos valores aceitos
+    const validPortes = ["basic", "starter", "pro", "enterprise"]
+    if (size && !validPortes.includes(size)) {
+      newErrors.size = `Porte deve ser um dos valores: ${validPortes.join(", ")}`
+    }
+
+    // Validar se o tipo está nos valores aceitos
+    const validTipos = ["Consultoria", "Upsell"]
+    if (projectType && !validTipos.includes(projectType)) {
+      newErrors.projectType = `Tipo deve ser um dos valores: ${validTipos.join(", ")}`
+    }
+
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
   }
@@ -199,6 +217,14 @@ export default function ConsultingMetricsForm() {
     try {
       setIsLoading(true)
 
+      // Validação adicional e normalização do porte
+      const validPortes = ["basic", "starter", "pro", "enterprise"]
+      const normalizedSize = size.trim().toLowerCase()
+
+      if (!validPortes.includes(normalizedSize)) {
+        throw new Error(`Porte inválido: "${size}". Valores aceitos: ${validPortes.join(", ")}`)
+      }
+
       // Format dates to YYYY-MM-DD
       const formattedStartDate = startDate ? format(startDate, "yyyy-MM-dd") : ""
       const formattedEndDate = endDate ? format(endDate, "yyyy-MM-dd") : ""
@@ -209,11 +235,22 @@ export default function ConsultingMetricsForm() {
       const consultant = consultants.find((c) => c.id === memberId)
       const consultorName = consultant ? consultant.name : ""
 
-      console.log("📝 Dados do formulário:", {
+      console.log("📝 Dados do formulário antes do envio:", {
         consultant,
         consultorName,
         memberId,
         consultants,
+        size: normalizedSize,
+        projectType,
+        porteValido: validPortes.includes(normalizedSize),
+        tipoValido: ["Consultoria", "Upsell"].includes(projectType),
+        dadosCompletos: {
+          cliente: client,
+          tipo: projectType,
+          consultor: consultorName,
+          porte: normalizedSize,
+          status: status,
+        },
       })
 
       const result = await createConsultingMetric({
@@ -223,7 +260,7 @@ export default function ConsultingMetricsForm() {
         client: client,
         project_type: projectType,
         status: status,
-        size: size,
+        size: normalizedSize, // Usar valor normalizado
         size_detail: sizeDetail || "",
         start_date: formattedStartDate,
         end_date: formattedEndDate,
@@ -248,9 +285,27 @@ export default function ConsultingMetricsForm() {
       }
     } catch (error) {
       console.error("Erro ao cadastrar projeto:", error)
+
+      // Melhor tratamento de erro para identificar o problema específico
+      let errorMessage = "Ocorreu um erro ao tentar cadastrar o projeto"
+
+      if (error instanceof Error) {
+        if (error.message.includes("tipo_check") || error.message.includes("check constraint")) {
+          errorMessage = `❌ Erro de restrição no banco de dados. 
+          
+🔧 Execute os scripts SQL na seguinte ordem:
+1. debug-tipo-constraint.sql (para ver o problema)
+2. fix-tipo-constraint.sql (para corrigir)
+
+Valor enviado para tipo: "${projectType}"`
+        } else {
+          errorMessage = error.message
+        }
+      }
+
       toast({
         title: "Erro ao cadastrar projeto",
-        description: error instanceof Error ? error.message : "Ocorreu um erro ao tentar cadastrar o projeto",
+        description: errorMessage,
         variant: "destructive",
       })
     } finally {
@@ -271,17 +326,17 @@ export default function ConsultingMetricsForm() {
           </div>
         </div>
         <Button
+          form="consulting-form"
           type="submit"
-          onClick={handleSubmit}
           disabled={isLoading}
           className="bg-white text-[#0056D6] hover:bg-white/90"
         >
           <Save className="mr-2 h-4 w-4" />
-          Salvar Alterações
+          {isLoading ? "Salvando..." : "Cadastrar Projeto"}
         </Button>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form id="consulting-form" onSubmit={handleSubmit} className="space-y-6">
         <Card>
           <CardContent className="pt-6">
             <div className="mb-6">
@@ -307,11 +362,17 @@ export default function ConsultingMetricsForm() {
                     <SelectValue placeholder="Selecione o tipo" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="consultoria">Consultoria</SelectItem>
-                    <SelectItem value="upsell">Upsell</SelectItem>
+                    {tipos.map((tipo) => (
+                      <SelectItem key={tipo.value} value={tipo.value}>
+                        {tipo.label}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
                 {errors.projectType && <p className="text-sm text-red-500">{errors.projectType}</p>}
+                <div className="text-xs text-muted-foreground">
+                  <p>✅ Valores aceitos: Consultoria, Upsell</p>
+                </div>
               </div>
 
               <div className="space-y-2">
@@ -365,6 +426,9 @@ export default function ConsultingMetricsForm() {
                   </SelectContent>
                 </Select>
                 {errors.size && <p className="text-sm text-red-500">{errors.size}</p>}
+                <div className="text-xs text-muted-foreground">
+                  <p>✅ Valores aceitos: basic, starter, pro, enterprise</p>
+                </div>
               </div>
 
               <div className="space-y-2">
@@ -549,6 +613,12 @@ export default function ConsultingMetricsForm() {
             </div>
           </CardContent>
         </Card>
+        <div className="flex justify-end pt-6">
+          <Button type="submit" disabled={isLoading} className="bg-[#0056D6] text-white hover:bg-[#0056D6]/90">
+            <Save className="mr-2 h-4 w-4" />
+            {isLoading ? "Salvando..." : "Cadastrar Projeto"}
+          </Button>
+        </div>
       </form>
     </div>
   )

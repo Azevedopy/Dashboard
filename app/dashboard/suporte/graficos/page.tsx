@@ -103,10 +103,8 @@ export default function GraficosPage() {
       if (customStartDate && customEndDate) {
         startDate = customStartDate
         endDate = customEndDate
-        newDateRange = {
-          from: new Date(customStartDate),
-          to: new Date(customEndDate),
-        }
+        // NÃO atualizar newDateRange quando usando datas customizadas
+        newDateRange = dateRange // Manter o dateRange atual
         console.log(`Usando período customizado: ${startDate} até ${endDate}`)
       } else {
         // Calcular baseado no período selecionado
@@ -120,8 +118,10 @@ export default function GraficosPage() {
         console.log(`Usando período ${period}: ${startDate} até ${endDate}`)
       }
 
-      // Atualizar o estado do dateRange
-      setDateRange(newDateRange)
+      // Só atualizar o dateRange se não for período customizado
+      if (period !== "custom") {
+        setDateRange(newDateRange)
+      }
 
       // Informações de debug
       let debugText = `Período: ${period}\n`
@@ -260,14 +260,17 @@ export default function GraficosPage() {
       return
     }
 
-    setPeriod("custom")
-    setIsCalendarOpen(false)
-
     // Usar as datas selecionadas no calendário para filtrar
     const startDate = format(dateRange.from, "yyyy-MM-dd")
     const endDate = format(dateRange.to, "yyyy-MM-dd")
 
     console.log(`Aplicando filtro customizado: ${startDate} até ${endDate}`)
+
+    // Definir como custom ANTES de buscar os dados
+    setPeriod("custom")
+    setIsCalendarOpen(false)
+
+    // Buscar dados com as datas customizadas
     await fetchData(startDate, endDate)
   }
 
@@ -284,6 +287,7 @@ export default function GraficosPage() {
         to: calculated.to,
       })
     }
+    // Se for customizado, manter o dateRange atual
   }
 
   // Determinar o tipo de gráfico com base na métrica selecionada
