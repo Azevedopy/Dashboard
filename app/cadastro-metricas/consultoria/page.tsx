@@ -577,7 +577,7 @@ Valor enviado para tipo: "${projectType}"`
               <p className="text-sm text-muted-foreground">Dados financeiros do projeto</p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               <div className="space-y-2">
                 <label className="text-sm font-medium">Valor da Consultoria (R$)</label>
                 <Input
@@ -587,6 +587,12 @@ Valor enviado para tipo: "${projectType}"`
                   value={consultingValue}
                   onChange={(e) => setConsultingValue(Number.parseFloat(e.target.value) || 0)}
                 />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Bônus (8%)</label>
+                <Input type="text" value={`R$ ${bonus8Percent.toFixed(2)}`} disabled />
+                <p className="text-xs text-muted-foreground">Valor calculado como 8% do valor da consultoria</p>
               </div>
 
               <div className="space-y-2">
