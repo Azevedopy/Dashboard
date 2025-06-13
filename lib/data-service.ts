@@ -82,6 +82,12 @@ export async function getMetrics(startDate?: string, endDate?: string, serviceTy
       `Parâmetros: startDate=${startDate || "TODOS"}, endDate=${endDate || "TODOS"}, serviceType=${serviceType || "TODOS"}`,
     )
 
+    // Verificar se o cliente Supabase foi inicializado corretamente
+    if (!supabase) {
+      console.error("❌ Erro crítico: Cliente Supabase não inicializado")
+      return []
+    }
+
     // Construir a consulta base
     let query = supabase.from("metrics").select("*")
 
@@ -113,113 +119,178 @@ export async function getMetrics(startDate?: string, endDate?: string, serviceTy
     query = query.order("date", { ascending: false })
 
     console.log("🔄 Executando consulta no Supabase...")
-    const { data: metricsData, error: metricsError } = await query
 
-    if (metricsError) {
-      console.error("❌ Error fetching metrics:", metricsError)
-      return []
-    }
+    try {
+      const { data: metricsData, error: metricsError } = await query
 
-    if (!metricsData || metricsData.length === 0) {
-      console.log("❌ Nenhuma métrica encontrada para os filtros especificados")
-      return []
-    }
-
-    console.log(`✅ Encontradas ${metricsData.length} métricas`)
-
-    // Analisar a distribuição temporal dos dados
-    const dates = metricsData.map((m) => m.date).sort()
-    const oldestDate = dates[0]
-    const newestDate = dates[dates.length - 1]
-    console.log(`📅 Período dos dados: ${oldestDate} até ${newestDate}`)
-
-    // Verificar registros antes de 12/05/2024
-    const cutoffDate = "2024-05-12"
-    const beforeCutoff = metricsData.filter((m) => m.date < cutoffDate)
-    const afterCutoff = metricsData.filter((m) => m.date >= cutoffDate)
-
-    console.log(`📊 Registros antes de ${cutoffDate}: ${beforeCutoff.length}`)
-    console.log(`📊 Registros depois de ${cutoffDate}: ${afterCutoff.length}`)
-
-    // Verificar soma de open_tickets nos dados brutos
-    const totalOpenTicketsRaw = metricsData.reduce((sum, metric) => {
-      const openTickets = Number(metric.open_tickets || 0)
-      return sum + openTickets
-    }, 0)
-
-    console.log(`🎫 Soma total de open_tickets nos dados brutos: ${totalOpenTicketsRaw}`)
-
-    // Verificar se há registros com formatos de data diferentes
-    const dateFormats = metricsData.reduce(
-      (acc, metric) => {
-        const dateStr = metric.date
-        if (dateStr.includes("T")) {
-          acc.iso += 1
-        } else if (dateStr.includes("/")) {
-          acc.br += 1
-        } else if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
-          acc.standard += 1
-        } else {
-          acc.other += 1
-        }
-        return acc
-      },
-      { iso: 0, br: 0, standard: 0, other: 0 },
-    )
-
-    console.log("📅 Formatos de data encontrados:", dateFormats)
-
-    // Buscar membros para mapear IDs para nomes
-    const { data: membersData, error: membersError } = await supabase.from("members").select("id, name")
-
-    if (membersError) {
-      console.error("⚠️  Error fetching members:", membersError)
-      // Continuar sem nomes de membros
-    }
-
-    // Criar mapa de ID para nome
-    const memberMap = new Map()
-    membersData?.forEach((member) => {
-      memberMap.set(member.id, member.name)
-    })
-
-    console.log(`👥 Mapeamento de membros: ${memberMap.size} membros encontrados`)
-
-    // Processar os dados
-    const processedData = metricsData.map((metric) => {
-      const memberName = memberMap.get(metric.member_id) || "Desconhecido"
-
-      return {
-        ...metric,
-        member: memberName,
-        // Garantir que os valores numéricos sejam números
-        open_tickets: Number(metric.open_tickets || 0),
-        resolved_tickets: Number(metric.resolved_tickets || 0),
-        average_response_time: Number(metric.average_response_time || 0),
-        resolution_rate: Number(metric.resolution_rate || 0),
-        csat_score: Number(metric.csat_score || 0),
-        evaluated_percentage: Number(metric.evaluated_percentage || 0),
+      if (metricsError) {
+        console.error("❌ Error fetching metrics:", metricsError)
+        return []
       }
-    })
 
-    // Verificar soma após processamento
-    const totalOpenTicketsProcessed = processedData.reduce((sum, metric) => {
-      return sum + metric.open_tickets
-    }, 0)
+      if (!metricsData || metricsData.length === 0) {
+        console.log("❌ Nenhuma métrica encontrada para os filtros especificados")
+        return []
+      }
 
-    console.log(`🎫 Soma de open_tickets após processamento: ${totalOpenTicketsProcessed}`)
+      console.log(`✅ Encontradas ${metricsData.length} métricas`)
 
-    // Adicionar propriedades camelCase para compatibilidade
-    const result = snakeToCamel(processedData)
+      // Analisar a distribuição temporal dos dados
+      const dates = metricsData.map((m) => m.date).sort()
+      const oldestDate = dates[0]
+      const newestDate = dates[dates.length - 1]
+      console.log(`📅 Período dos dados: ${oldestDate} até ${newestDate}`)
 
-    console.log(`✅ Retornando ${result.length} registros processados`)
-    console.log(`=== BUSCA DE MÉTRICAS CONCLUÍDA ===`)
+      // Verificar registros antes de 12/05/2024
+      const cutoffDate = "2024-05-12"
+      const beforeCutoff = metricsData.filter((m) => m.date < cutoffDate)
+      const afterCutoff = metricsData.filter((m) => m.date >= cutoffDate)
 
-    return result
+      console.log(`📊 Registros antes de ${cutoffDate}: ${beforeCutoff.length}`)
+      console.log(`📊 Registros depois de ${cutoffDate}: ${afterCutoff.length}`)
+
+      // Verificar soma de open_tickets nos dados brutos
+      const totalOpenTicketsRaw = metricsData.reduce((sum, metric) => {
+        const openTickets = Number(metric.open_tickets || 0)
+        return sum + openTickets
+      }, 0)
+
+      console.log(`🎫 Soma total de open_tickets nos dados brutos: ${totalOpenTicketsRaw}`)
+
+      // Verificar se há registros com formatos de data diferentes
+      const dateFormats = metricsData.reduce(
+        (acc, metric) => {
+          const dateStr = metric.date
+          if (dateStr.includes("T")) {
+            acc.iso += 1
+          } else if (dateStr.includes("/")) {
+            acc.br += 1
+          } else if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+            acc.standard += 1
+          } else {
+            acc.other += 1
+          }
+          return acc
+        },
+        { iso: 0, br: 0, standard: 0, other: 0 },
+      )
+
+      console.log("📅 Formatos de data encontrados:", dateFormats)
+
+      // Buscar membros para mapear IDs para nomes
+      try {
+        const { data: membersData, error: membersError } = await supabase.from("members").select("id, name")
+
+        if (membersError) {
+          console.error("⚠️  Error fetching members:", membersError)
+          // Continuar sem nomes de membros
+        }
+
+        // Criar mapa de ID para nome
+        const memberMap = new Map()
+        membersData?.forEach((member) => {
+          memberMap.set(member.id, member.name)
+        })
+
+        console.log(`👥 Mapeamento de membros: ${memberMap.size} membros encontrados`)
+
+        // Processar os dados
+        const processedData = metricsData.map((metric) => {
+          const memberName = memberMap.get(metric.member_id) || "Desconhecido"
+
+          return {
+            ...metric,
+            member: memberName,
+            // Garantir que os valores numéricos sejam números
+            open_tickets: Number(metric.open_tickets || 0),
+            resolved_tickets: Number(metric.resolved_tickets || 0),
+            average_response_time: Number(metric.average_response_time || 0),
+            resolution_rate: Number(metric.resolution_rate || 0),
+            csat_score: Number(metric.csat_score || 0),
+            evaluated_percentage: Number(metric.evaluated_percentage || 0),
+          }
+        })
+
+        // Verificar soma após processamento
+        const totalOpenTicketsProcessed = processedData.reduce((sum, metric) => {
+          return sum + metric.open_tickets
+        }, 0)
+
+        console.log(`🎫 Soma de open_tickets após processamento: ${totalOpenTicketsProcessed}`)
+
+        // Adicionar propriedades camelCase para compatibilidade
+        const result = snakeToCamel(processedData)
+
+        console.log(`✅ Retornando ${result.length} registros processados`)
+        console.log(`=== BUSCA DE MÉTRICAS CONCLUÍDA ===`)
+
+        return result
+      } catch (memberError) {
+        console.error("❌ Erro ao buscar membros:", memberError)
+        // Continuar sem nomes de membros, retornar dados brutos com camelCase
+        const result = snakeToCamel(metricsData)
+        return result
+      }
+    } catch (queryError) {
+      console.error("❌ Erro na execução da consulta:", queryError)
+      return []
+    }
   } catch (error) {
     console.error("❌ Unexpected error fetching metrics:", error)
+    // Retornar dados mockados para desenvolvimento se estiver em ambiente de preview
+    if (typeof window !== "undefined" && window.location.hostname.includes("v0.dev")) {
+      console.log("🔄 Retornando dados mockados para ambiente de preview")
+      return getMockMetrics()
+    }
     return []
   }
+}
+
+// Adicionar função para gerar dados mockados para ambiente de preview
+function getMockMetrics(): MetricEntry[] {
+  const mockData = [
+    {
+      id: "1",
+      member_id: "1",
+      member: "João Silva",
+      date: "2024-05-01",
+      resolution_rate: 95,
+      average_response_time: 2.5,
+      csat_score: 4.8,
+      evaluated_percentage: 85,
+      open_tickets: 12,
+      resolved_tickets: 45,
+      service_type: "suporte",
+      resolutionRate: 95,
+      averageResponseTime: 2.5,
+      csatScore: 4.8,
+      evaluatedPercentage: 85,
+      openTickets: 12,
+      resolvedTickets: 45,
+      serviceType: "suporte",
+    },
+    {
+      id: "2",
+      member_id: "2",
+      member: "Maria Souza",
+      date: "2024-05-02",
+      resolution_rate: 92,
+      average_response_time: 3.1,
+      csat_score: 4.5,
+      evaluated_percentage: 80,
+      open_tickets: 15,
+      resolved_tickets: 38,
+      service_type: "suporte",
+      resolutionRate: 92,
+      averageResponseTime: 3.1,
+      csatScore: 4.5,
+      evaluatedPercentage: 80,
+      openTickets: 15,
+      resolvedTickets: 38,
+      serviceType: "suporte",
+    },
+  ]
+  return mockData
 }
 
 // Resto das funções permanecem iguais...

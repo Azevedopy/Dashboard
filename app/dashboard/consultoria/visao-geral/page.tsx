@@ -81,14 +81,37 @@ export default function ConsultoriaVisaoGeralPage() {
 
       console.log("Buscando dados com filtros:", filters)
 
-      // Buscar estatísticas e projetos em paralelo
-      const [statsData, projectsData] = await Promise.all([getConsultingStats(filters), getConsultingProjects(filters)])
+      try {
+        // Buscar estatísticas e projetos em paralelo
+        const [statsData, projectsData] = await Promise.all([
+          getConsultingStats(filters),
+          getConsultingProjects(filters),
+        ])
 
-      console.log("Estatísticas encontradas:", statsData)
-      console.log("Projetos encontrados:", projectsData)
+        console.log("Estatísticas encontradas:", statsData)
+        console.log("Projetos encontrados:", projectsData)
 
-      setStats(statsData)
-      setProjects(projectsData)
+        setStats(statsData)
+        setProjects(projectsData)
+      } catch (fetchError) {
+        console.error("Error fetching data:", fetchError)
+        toast({
+          title: "Erro ao carregar dados específicos",
+          description: "Alguns dados podem estar incompletos. Usando dados de exemplo.",
+          variant: "destructive",
+        })
+
+        // Se estamos em ambiente de preview, usar dados mockados
+        if (typeof window !== "undefined" && window.location.hostname.includes("v0.dev")) {
+          // Dados já serão mockados pelas funções
+          const [statsData, projectsData] = await Promise.all([
+            getConsultingStats(filters),
+            getConsultingProjects(filters),
+          ])
+          setStats(statsData)
+          setProjects(projectsData)
+        }
+      }
     } catch (error) {
       console.error("Error fetching data:", error)
       toast({

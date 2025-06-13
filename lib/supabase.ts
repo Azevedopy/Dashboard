@@ -1,15 +1,115 @@
 import { createClient } from "@supabase/supabase-js"
 
 // Usar as variáveis de ambiente corretas fornecidas pelo usuário
-const supabaseUrl = "https://wmisdbixxpzhhihujueb.supabase.co"
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://wmisdbixxpzhhihujueb.supabase.co"
 const supabaseAnonKey =
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndtaXNkYml4eHB6aGhpaHVqdWViIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDMzMDE0MTksImV4cCI6MjA1ODg3NzQxOX0.V3NspT501soozWpzRPfOc8wyNTVRehan-pE0cmc6iTM"
 
+// Criar o cliente Supabase
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+
+// Variável para armazenar a instância do cliente Supabase (singleton pattern)
+let supabaseInstance: ReturnType<typeof createClient> | null = null
 
 // Função para criar um novo cliente Supabase (mantendo compatibilidade)
 export function getSupabase() {
-  return supabase
+  if (supabaseInstance) return supabaseInstance
+
+  try {
+    // Usar a instância já criada acima
+    supabaseInstance = supabase
+    return supabaseInstance
+  } catch (error) {
+    console.error("❌ Erro ao inicializar cliente Supabase:", error)
+
+    // Em ambiente de desenvolvimento/preview, criar um cliente mock
+    if (typeof window !== "undefined" && window.location.hostname.includes("v0.dev")) {
+      console.log("🔄 Criando cliente Supabase mock para ambiente de preview")
+      return createMockSupabaseClient()
+    }
+
+    return null
+  }
+}
+
+// Cliente mock para ambiente de preview
+function createMockSupabaseClient() {
+  return {
+    from: (table: string) => ({
+      select: (columns: string) => ({
+        eq: (column: string, value: any) => ({
+          single: async () => ({ data: null, error: null }),
+          order: (column: string, { ascending }: { ascending: boolean }) => ({
+            then: async () => ({ data: [], error: null }),
+          }),
+          in: (column: string, values: any[]) => ({
+            order: (column: string, { ascending }: { ascending: boolean }) => ({
+              then: async () => ({ data: [], error: null }),
+            }),
+          }),
+        }),
+        order: (column: string, { ascending }: { ascending: boolean }) => ({
+          then: async () => ({ data: [], error: null }),
+        }),
+        gte: (column: string, value: any) => ({
+          lte: (column: string, value: any) => ({
+            eq: (column: string, value: any) => ({
+              order: (column: string, { ascending }: { ascending: boolean }) => ({
+                then: async () => ({ data: [], error: null }),
+              }),
+              order: (column: string, { ascending }: { ascending: boolean }) => ({
+                then: async () => ({ data: [], error: null }),
+              }),
+            }),
+            order: (column: string, { ascending }: { ascending: boolean }) => ({
+              then: async () => ({ data: [], error: null }),
+            }),
+          }),
+          order: (column: string, { ascending }: { ascending: boolean }) => ({
+            then: async () => ({ data: [], error: null }),
+          }),
+        }),
+        lte: (column: string, value: any) => ({
+          order: (column: string, { ascending }: { ascending: boolean }) => ({
+            then: async () => ({ data: [], error: null }),
+          }),
+        }),
+        ilike: (column: string, value: any) => ({
+          then: async () => ({ data: [], error: null }),
+        }),
+        in: (column: string, values: any[]) => ({
+          order: (column: string, { ascending }: { ascending: boolean }) => ({
+            then: async () => ({ data: [], error: null }),
+          }),
+        }),
+        then: async () => ({ data: [], error: null }),
+      }),
+      insert: (data: any[]) => ({
+        select: () => ({
+          single: async () => ({ data: null, error: null }),
+          then: async () => ({ data: [], error: null }),
+        }),
+        then: async () => ({ data: null, error: null }),
+      }),
+      update: (data: any) => ({
+        eq: (column: string, value: any) => ({
+          select: () => ({
+            single: async () => ({ data: null, error: null }),
+          }),
+          then: async () => ({ data: null, error: null }),
+        }),
+      }),
+      delete: () => ({
+        eq: (column: string, value: any) => ({
+          then: async () => ({ error: null }),
+        }),
+      }),
+    }),
+    auth: {
+      getSession: async () => ({ data: { session: null }, error: null }),
+    },
+  }
 }
 
 export type Member = {

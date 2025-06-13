@@ -348,7 +348,7 @@ Valor enviado para tipo: "${projectType}"`
 
   return (
     <div className="container mx-auto py-6">
-      <div className="p-6 bg-[#0056D6] text-white flex justify-between items-center mb-6">
+      <div className="p-6 bg-[#0056D6] text-white flex items-center mb-6">
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="icon" onClick={() => router.back()} className="text-white hover:bg-white/20">
             <ArrowLeft className="h-5 w-5" />
@@ -358,15 +358,6 @@ Valor enviado para tipo: "${projectType}"`
             <p className="text-sm text-white/90">Adicione as informações do projeto de consultoria</p>
           </div>
         </div>
-        <Button
-          form="consulting-form"
-          type="submit"
-          disabled={isLoading}
-          className="bg-white text-[#0056D6] hover:bg-white/90"
-        >
-          <Save className="mr-2 h-4 w-4" />
-          {isLoading ? "Salvando..." : "Cadastrar Projeto"}
-        </Button>
       </div>
 
       <form id="consulting-form" onSubmit={handleSubmit} className="space-y-6">
