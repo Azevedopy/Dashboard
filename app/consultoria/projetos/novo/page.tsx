@@ -62,6 +62,7 @@ export default function NewConsultingProjectPage() {
   const onSubmit = async (data: ProjectFormValues) => {
     setIsSubmitting(true)
     try {
+      console.log("Enviando projeto com dados:", data) // Log para debug
       const result = await createConsultingProject(data)
       if (result) {
         toast({

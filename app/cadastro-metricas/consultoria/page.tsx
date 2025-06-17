@@ -214,7 +214,7 @@ export default function ConsultingMetricsForm() {
     if (!size) newErrors.size = "Porte é obrigatório"
     if (!startDate) newErrors.startDate = "Data de início é obrigatória"
     if (!endDate) newErrors.endDate = "Data de término é obrigatória"
-    if (netProjectValue <= 0) newErrors.netProjectValue = "Valor líquido deve ser maior que zero"
+    // Remover a linha: `if (netProjectValue <= 0) newErrors.netProjectValue = "Valor líquido deve ser maior que zero"`
 
     // Validar se a data de término é posterior à data de início
     if (startDate && endDate && startDate > endDate) {
@@ -590,6 +590,18 @@ Valor enviado para tipo: "${projectType}"`
                 <label className="text-sm font-medium">Bônus (12%)</label>
                 <Input type="text" value={`R$ ${bonus12Percent.toFixed(2)}`} disabled />
                 <p className="text-xs text-muted-foreground">Valor calculado como 12% do valor da consultoria</p>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Valor Líquido do Projeto (R$)</label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={netProjectValue}
+                  onChange={(e) => setNetProjectValue(Number.parseFloat(e.target.value) || 0)}
+                  className={errors.netProjectValue ? "border-red-500" : ""}
+                />
+                {errors.netProjectValue && <p className="text-sm text-red-500">{errors.netProjectValue}</p>}
               </div>
             </div>
           </CardContent>

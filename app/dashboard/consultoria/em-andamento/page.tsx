@@ -26,8 +26,8 @@ export default function ConsultoriasEmAndamentoPage() {
     consultor: "todos",
     tipo: "todos",
     dateRange: {
-      from: new Date(new Date().getFullYear(), 0, 1), // Início do ano atual
-      to: new Date(),
+      from: undefined, // Remover restrição de data inicial
+      to: undefined, // Remover restrição de data final
     },
   })
   const [isCalendarOpen, setIsCalendarOpen] = useState(false)
@@ -49,10 +49,13 @@ export default function ConsultoriasEmAndamentoPage() {
         status: "em_andamento", // Apenas projetos em andamento
       }
 
+      console.log("Buscando projetos em andamento com filtros:", filterParams) // Log para debug
+
       if (filters.consultor !== "todos") {
         filterParams.consultor = filters.consultor
       }
 
+      // Só aplicar filtros de data se foram especificados
       if (filters.dateRange.from) {
         filterParams.startDate = format(filters.dateRange.from, "yyyy-MM-dd")
       }
@@ -63,11 +66,14 @@ export default function ConsultoriasEmAndamentoPage() {
 
       // Buscar projetos
       const projectsData = await getConsultingProjects(filterParams)
+      console.log(`Projetos em andamento encontrados: ${projectsData.length}`) // Log para debug
+      console.log("Dados dos projetos:", projectsData) // Log adicional para debug
 
       // Filtrar por tipo se necessário
       let filteredProjects = projectsData
       if (filters.tipo !== "todos") {
         filteredProjects = projectsData.filter((project) => project.tipo.toLowerCase() === filters.tipo.toLowerCase())
+        console.log(`Após filtro de tipo: ${filteredProjects.length} projetos`) // Log para debug
       }
 
       setProjects(filteredProjects)
@@ -281,17 +287,15 @@ export default function ConsultoriasEmAndamentoPage() {
                   <PopoverTrigger asChild>
                     <Button variant="outline" className="w-full justify-start text-left font-normal">
                       <CalendarIcon className="mr-2 h-4 w-4" />
-                      {filters.dateRange.from ? (
-                        filters.dateRange.to ? (
-                          <>
-                            {format(filters.dateRange.from, "dd/MM/yyyy", { locale: ptBR })} -{" "}
-                            {format(filters.dateRange.to, "dd/MM/yyyy", { locale: ptBR })}
-                          </>
-                        ) : (
-                          format(filters.dateRange.from, "dd/MM/yyyy", { locale: ptBR })
-                        )
+                      {filters.dateRange.from && filters.dateRange.to ? (
+                        <>
+                          {format(filters.dateRange.from, "dd/MM/yyyy", { locale: ptBR })} -{" "}
+                          {format(filters.dateRange.to, "dd/MM/yyyy", { locale: ptBR })}
+                        </>
+                      ) : filters.dateRange.from ? (
+                        format(filters.dateRange.from, "dd/MM/yyyy", { locale: ptBR })
                       ) : (
-                        "Selecione um período"
+                        "Todos os períodos"
                       )}
                     </Button>
                   </PopoverTrigger>

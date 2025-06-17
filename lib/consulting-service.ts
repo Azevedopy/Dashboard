@@ -19,9 +19,12 @@ export async function getConsultingProjects(
       return getMockConsultingProjects()
     }
 
+    console.log("Buscando projetos com filtros:", filters) // Log para debug
+
     let query = supabase.from("metrics_consultoria").select("*")
 
     if (filters.status) {
+      console.log(`Filtrando por status: ${filters.status}`) // Log para debug
       query = query.eq("status", filters.status)
     }
 
@@ -29,13 +32,19 @@ export async function getConsultingProjects(
       query = query.eq("consultor", filters.consultor)
     }
 
+    // Aplicar filtros de data apenas se fornecidos
     if (filters.startDate) {
+      console.log(`Filtrando por data início >= ${filters.startDate}`) // Log para debug
       query = query.gte("data_inicio", filters.startDate)
     }
 
     if (filters.endDate) {
+      console.log(`Filtrando por data término <= ${filters.endDate}`) // Log para debug
       query = query.lte("data_termino", filters.endDate)
     }
+
+    // Ordenar por data de criação (mais recentes primeiro)
+    query = query.order("created_at", { ascending: false })
 
     const { data, error } = await query
 
@@ -44,6 +53,8 @@ export async function getConsultingProjects(
       return getMockConsultingProjects()
     }
 
+    console.log(`Encontrados ${data?.length || 0} projetos`) // Log para debug
+    console.log("Primeiros 3 projetos:", data?.slice(0, 3)) // Log para debug
     return data || []
   } catch (error) {
     console.error("Unexpected error fetching consulting projects:", error)
@@ -95,13 +106,22 @@ export async function createConsultingProject(
       }
     }
 
-    const { data, error } = await supabase.from("metrics_consultoria").insert([project]).select().single()
+    // Garantir que o status seja definido como "em_andamento" se não for fornecido
+    const projectData = {
+      ...project,
+      status: project.status || "em_andamento",
+    }
+
+    console.log("Criando projeto com dados:", projectData) // Log para debug
+
+    const { data, error } = await supabase.from("metrics_consultoria").insert([projectData]).select().single()
 
     if (error) {
       console.error("Error creating consulting project:", error)
       return null
     }
 
+    console.log("Projeto criado com sucesso:", data) // Log para debug
     return data
   } catch (error) {
     console.error("Unexpected error creating consulting project:", error)

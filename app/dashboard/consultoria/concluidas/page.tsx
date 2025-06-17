@@ -45,6 +45,9 @@ export default function ConsultoriasConcluidasPage() {
     },
   })
 
+  // Verificar se estamos em ambiente de preview
+  const isPreview = typeof window !== "undefined" && window.location.hostname.includes("v0.dev")
+
   // Função de busca de dados refatorada para ser chamada em diferentes contextos
   const fetchData = useCallback(async () => {
     setIsLoading(true)
@@ -78,7 +81,7 @@ export default function ConsultoriasConcluidasPage() {
       // Filtrar por tipo se necessário
       let filteredProjects = projectsData
       if (filters.tipo !== "todos") {
-        filteredProjects = projectsData.filter((project) => project.tipo.toLowerCase() === filters.tipo.toLowerCase())
+        filteredProjects = projectsData.filter((project) => project.tipo?.toLowerCase() === filters.tipo.toLowerCase())
       }
 
       console.log(`Total de projetos encontrados: ${filteredProjects.length}`)
@@ -100,6 +103,10 @@ export default function ConsultoriasConcluidasPage() {
         description: "Ocorreu um erro ao carregar as consultorias concluídas.",
         variant: "destructive",
       })
+
+      // Em caso de erro, definir dados vazios ou mockados
+      setProjects([])
+      setConsultores([])
     } finally {
       setIsLoading(false)
     }
@@ -136,11 +143,18 @@ export default function ConsultoriasConcluidasPage() {
         "Prazo Atingido": project.prazo_atingido ? "Sim" : "Não",
       }))
 
-      exportToExcel(dataToExport, "consultorias_concluidas")
-      toast({
-        title: "Sucesso",
-        description: "Dados exportados com sucesso",
-      })
+      if (isPreview) {
+        toast({
+          title: "Modo Preview",
+          description: "A exportação não está disponível no modo preview.",
+        })
+      } else {
+        exportToExcel(dataToExport, "consultorias_concluidas")
+        toast({
+          title: "Sucesso",
+          description: "Dados exportados com sucesso",
+        })
+      }
     } catch (error) {
       console.error("Error exporting data:", error)
       toast({
@@ -159,7 +173,9 @@ export default function ConsultoriasConcluidasPage() {
   return (
     <div className="flex flex-col h-full">
       <div className="p-6 bg-[#0056D6] text-white">
-        <h1 className="text-2xl font-bold text-white">Consultorias Concluídas</h1>
+        <h1 className="text-2xl font-bold text-white">
+          Consultorias Concluídas {isPreview && <span className="text-sm font-normal text-white/80">(Preview)</span>}
+        </h1>
         <p className="text-sm text-white/90">Visualize e analise todas as consultorias que foram concluídas.</p>
       </div>
 

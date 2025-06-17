@@ -99,31 +99,44 @@ export function ConsultoriaPieChart({ data, isLoading, groupByField, title }: Co
             const label = context.label || ""
             const value = context.raw || 0
             const total = context.dataset.data.reduce((a: number, b: number) => a + b, 0)
+            if (total === 0) return `${label}: ${value}`
             const percentage = Math.round(((value as number) / total) * 100)
             return `${label}: ${value} (${percentage}%)`
           },
         },
       },
-      // Configuração do plugin datalabels
-      datalabels: {
-        formatter: (value, ctx) => {
-          const datapoints = ctx.chart.data.datasets[0].data
-          const total = datapoints.reduce((a: number, b: number) => a + b, 0)
-          const percentage = Math.round((value / total) * 100)
-          return percentage > 5 ? `${percentage}%` : "" // Só mostra se for maior que 5%
-        },
-        color: "#ffffff",
-        font: {
-          weight: "bold",
-          size: 12,
-        },
-        textStrokeColor: "#000000",
-        textStrokeWidth: 1,
-        textShadowBlur: 5,
-        textShadowColor: "rgba(0, 0, 0, 0.5)",
-        align: "center",
-        anchor: "center",
-      },
+      // Only include datalabels if we have valid data
+      datalabels:
+        chartData.datasets?.[0]?.data?.length > 0
+          ? {
+              display: (context) => {
+                const dataset = context.dataset
+                const value = dataset.data[context.dataIndex]
+                const total = dataset.data.reduce((a: number, b: number) => a + b, 0)
+                return total > 0 && value > 0 && value / total > 0.05
+              },
+              formatter: (value, ctx) => {
+                if (!value || !ctx.chart?.data?.datasets?.[0]?.data) return ""
+
+                const datapoints = ctx.chart.data.datasets[0].data
+                const total = datapoints.reduce((a: number, b: number) => a + b, 0)
+
+                if (total === 0) return ""
+
+                const percentage = Math.round((value / total) * 100)
+                return percentage > 5 ? `${percentage}%` : ""
+              },
+              color: "#ffffff",
+              font: {
+                weight: "bold" as const,
+                size: 12,
+              },
+              textStrokeColor: "#000000",
+              textStrokeWidth: 1,
+              align: "center" as const,
+              anchor: "center" as const,
+            }
+          : false,
     },
     layout: {
       padding: 10,
@@ -145,6 +158,10 @@ export function ConsultoriaPieChart({ data, isLoading, groupByField, title }: Co
   // Verificar se chartData tem dados antes de renderizar
   if (!chartData.labels.length) {
     return <div className="flex items-center justify-center h-full">Processando dados...</div>
+  }
+
+  if (!chartData.datasets?.[0]?.data?.length || chartData.datasets[0].data.every((val) => val === 0)) {
+    return <div className="flex items-center justify-center h-full">Nenhum dado disponível para exibição.</div>
   }
 
   return <Pie options={options} data={chartData} />

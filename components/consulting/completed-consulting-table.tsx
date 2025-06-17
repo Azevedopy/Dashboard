@@ -21,12 +21,18 @@ interface CompletedConsultingTableProps {
 export function CompletedConsultingTable({ projects, isLoading }: CompletedConsultingTableProps) {
   const [searchTerm, setSearchTerm] = useState("")
 
-  const filteredProjects = projects.filter(
+  // Verificar se estamos em ambiente de preview
+  const isPreview = typeof window !== "undefined" && window.location.hostname.includes("v0.dev")
+
+  // Garantir que projects é sempre um array
+  const safeProjects = Array.isArray(projects) ? projects : []
+
+  const filteredProjects = safeProjects.filter(
     (project) =>
-      project.cliente.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      project.cliente?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       project.consultor?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      project.tipo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      project.porte.toLowerCase().includes(searchTerm.toLowerCase()),
+      project.tipo?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      project.porte?.toLowerCase().includes(searchTerm.toLowerCase()),
   )
 
   // Formatar datas
@@ -47,6 +53,8 @@ export function CompletedConsultingTable({ projects, isLoading }: CompletedConsu
 
   // Renderizar o tipo de projeto com badge
   const renderTipo = (tipo: string) => {
+    if (!tipo) return "N/A"
+
     if (tipo.toLowerCase() === "consultoria") {
       return (
         <Badge variant="outline" className="bg-blue-50 text-blue-700">
@@ -63,6 +71,15 @@ export function CompletedConsultingTable({ projects, isLoading }: CompletedConsu
     return tipo
   }
 
+  // Função para lidar com o clique no botão Ver
+  const handleViewClick = (id: string) => {
+    if (isPreview) {
+      alert("Funcionalidade indisponível no modo preview")
+    } else {
+      window.location.href = `/consultoria/projetos/${id}`
+    }
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -74,6 +91,7 @@ export function CompletedConsultingTable({ projects, isLoading }: CompletedConsu
         />
         <div className="text-sm text-muted-foreground">
           {filteredProjects.length} {filteredProjects.length === 1 ? "projeto" : "projetos"}
+          {isPreview && " (Preview)"}
         </div>
       </div>
 
@@ -135,11 +153,7 @@ export function CompletedConsultingTable({ projects, isLoading }: CompletedConsu
                   </TableCell>
                   <TableCell>{formatDate(project.data_finalizacao)}</TableCell>
                   <TableCell>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => (window.location.href = `/consultoria/projetos/${project.id}`)}
-                    >
+                    <Button variant="ghost" size="sm" onClick={() => handleViewClick(project.id)}>
                       <Eye className="h-4 w-4 mr-1" /> Ver
                     </Button>
                   </TableCell>
