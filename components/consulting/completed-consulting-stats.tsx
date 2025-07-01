@@ -1,91 +1,102 @@
+"use client"
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { formatCurrency } from "@/lib/utils"
-import type { ConsultingStats } from "@/lib/types"
+import type { ConsultingProject } from "@/lib/types"
+import { TrendingUp, Star, DollarSign } from "lucide-react"
 
 interface CompletedConsultingStatsProps {
-  stats: ConsultingStats
+  projects: ConsultingProject[]
   isLoading: boolean
 }
 
-export function CompletedConsultingStats({ stats, isLoading }: CompletedConsultingStatsProps) {
-  // Verificar se estamos em ambiente de preview
-  const isPreview =
-    typeof window !== "undefined" &&
-    (window.location.hostname.includes("v0.dev") || window.location.hostname === "localhost")
-
-  // Garantir que temos valores válidos para exibir
-  const safeStats = {
-    completedProjects: stats?.completedProjects || 0,
-    totalRevenue: stats?.totalRevenue || 0,
-    averageRating: stats?.averageRating || 0,
-    deadlineComplianceRate: stats?.deadlineComplianceRate || 0,
+export function CompletedConsultingStats({ projects, isLoading }: CompletedConsultingStatsProps) {
+  if (isLoading) {
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {Array(4)
+          .fill(0)
+          .map((_, index) => (
+            <Card key={index}>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-4 w-4" />
+              </CardHeader>
+              <CardContent>
+                <Skeleton className="h-8 w-16 mb-1" />
+                <Skeleton className="h-3 w-32" />
+              </CardContent>
+            </Card>
+          ))}
+      </div>
+    )
   }
 
-  // Função para renderizar o conteúdo de cada card
-  const renderCardContent = (value: string | number, isLoading: boolean) => {
-    if (isLoading) {
-      return <Skeleton className="h-7 w-20" />
-    }
-    return <div className="text-2xl font-bold">{value}</div>
-  }
+  // Calcular estatísticas
+  const totalProjects = projects.length
+
+  const totalRevenue = projects.reduce((sum, project) => {
+    return sum + (Number(project.valor_consultoria) || 0)
+  }, 0)
+
+  const totalCommission = projects.reduce((sum, project) => {
+    return sum + (Number(project.valor_comissao) || 0)
+  }, 0)
+
+  const averageRating =
+    projects.length > 0
+      ? projects.reduce((sum, project) => {
+          return sum + (Number(project.avaliacao_estrelas) || 0)
+        }, 0) / projects.length
+      : 0
+
+  const deadlineCompliance =
+    projects.length > 0 ? (projects.filter((project) => project.prazo_atingido).length / projects.length) * 100 : 0
 
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-      {/* Total de Consultorias */}
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Total de Consultorias</CardTitle>
-          {isPreview && <span className="text-xs text-blue-600 font-medium">DEMO</span>}
+          <CardTitle className="text-sm font-medium">Total de Projetos</CardTitle>
+          <TrendingUp className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
-          {renderCardContent(safeStats.completedProjects, isLoading)}
+          <div className="text-2xl font-bold">{totalProjects}</div>
           <p className="text-xs text-muted-foreground">Consultorias concluídas</p>
         </CardContent>
       </Card>
 
-      {/* Receita Total */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-sm font-medium">Receita Total</CardTitle>
-          {isPreview && <span className="text-xs text-blue-600 font-medium">DEMO</span>}
+          <DollarSign className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
-          {renderCardContent(formatCurrency(safeStats.totalRevenue), isLoading)}
+          <div className="text-2xl font-bold">{formatCurrency(totalRevenue)}</div>
           <p className="text-xs text-muted-foreground">Valor total das consultorias</p>
         </CardContent>
       </Card>
 
-      {/* Avaliação Média */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Avaliação Média</CardTitle>
-          {isPreview && <span className="text-xs text-blue-600 font-medium">DEMO</span>}
+          <CardTitle className="text-sm font-medium">Comissões Pagas</CardTitle>
+          <DollarSign className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
-          {renderCardContent(`${safeStats.averageRating.toFixed(1)}/5`, isLoading)}
-          <p className="text-xs text-muted-foreground">
-            Média de avaliações
-            {safeStats.averageRating >= 4.5 && " ⭐"}
-            {safeStats.averageRating >= 4.0 && safeStats.averageRating < 4.5 && " 👍"}
-          </p>
+          <div className="text-2xl font-bold">{formatCurrency(totalCommission)}</div>
+          <p className="text-xs text-muted-foreground">Total em comissões</p>
         </CardContent>
       </Card>
 
-      {/* Cumprimento de Prazo */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Cumprimento de Prazo</CardTitle>
-          {isPreview && <span className="text-xs text-blue-600 font-medium">DEMO</span>}
+          <CardTitle className="text-sm font-medium">Avaliação Média</CardTitle>
+          <Star className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
-          {renderCardContent(`${safeStats.deadlineComplianceRate.toFixed(0)}%`, isLoading)}
-          <p className="text-xs text-muted-foreground">
-            Taxa de cumprimento de prazos
-            {safeStats.deadlineComplianceRate >= 80 && " 🎯"}
-            {safeStats.deadlineComplianceRate >= 60 && safeStats.deadlineComplianceRate < 80 && " ⚠️"}
-            {safeStats.deadlineComplianceRate < 60 && " 🔴"}
-          </p>
+          <div className="text-2xl font-bold">{averageRating.toFixed(1)}/5</div>
+          <p className="text-xs text-muted-foreground">{deadlineCompliance.toFixed(0)}% prazo atingido</p>
         </CardContent>
       </Card>
     </div>

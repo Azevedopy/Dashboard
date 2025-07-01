@@ -161,7 +161,7 @@ export async function getCompletedConsultingProjects(filters?: {
     }
 
     // Usar a tabela principal metrics_consultoria
-    let query = supabase.from("metrics_consultoria").select("*").eq("status", "concluido")
+    let query = supabase.from("metrics_consultoria").select("*").in("status", ["concluido", "finalizado"])
 
     // Aplicar filtros
     if (filters) {
@@ -221,9 +221,11 @@ export async function getCompletedConsultingStats(filters?: {
 
     // Calcular estatísticas
     const completedProjects = projects.length
+    // Usar 'valor_consultoria' conforme a estrutura do banco de dados
     const totalRevenue = projects.reduce((sum, project) => sum + (project.valor_consultoria || 0), 0)
 
     const projectsWithRating = projects.filter(
+      // Usar 'avaliacao_estrelas' conforme a estrutura do banco de dados
       (p) => p.avaliacao_estrelas !== null && p.avaliacao_estrelas !== undefined && p.avaliacao_estrelas > 0,
     )
     const averageRating =
@@ -231,13 +233,19 @@ export async function getCompletedConsultingStats(filters?: {
         ? projectsWithRating.reduce((sum, p) => sum + (p.avaliacao_estrelas || 0), 0) / projectsWithRating.length
         : 0
 
-    const projectsWithDuration = projects.filter((p) => p.tempo_dias && p.tempo_dias > 0)
+    const projectsWithDuration = projects.filter(
+      // Usar 'tempo_dias' conforme a estrutura do banco de dados
+      (p) => p.tempo_dias && p.tempo_dias > 0,
+    )
     const averageProjectDuration =
       projectsWithDuration.length > 0
         ? projectsWithDuration.reduce((sum, p) => sum + (p.tempo_dias || 0), 0) / projectsWithDuration.length
         : 0
 
-    const projectsWithDeadlineInfo = projects.filter((p) => p.prazo_atingido !== null && p.prazo_atingido !== undefined)
+    const projectsWithDeadlineInfo = projects.filter(
+      // Usar 'prazo_atingido' conforme a estrutura do banco de dados
+      (p) => p.prazo_atingido !== null && p.prazo_atingido !== undefined,
+    )
     const deadlineComplianceRate =
       projectsWithDeadlineInfo.length > 0
         ? (projectsWithDeadlineInfo.filter((p) => p.prazo_atingido === true).length / projectsWithDeadlineInfo.length) *
@@ -254,6 +262,10 @@ export async function getCompletedConsultingStats(filters?: {
       deadlineComplianceRate,
     }
 
+    console.log("📊 Projetos encontrados para stats:", projects.length)
+    if (projects.length > 0) {
+      console.log("📊 Primeiro projeto para stats:", projects[0])
+    }
     console.log("📊 Estatísticas calculadas:", stats)
     return stats
   } catch (error) {
@@ -300,7 +312,7 @@ export async function getCompletedConsultores(): Promise<string[]> {
     const { data, error } = await supabase
       .from("metrics_consultoria")
       .select("consultor")
-      .eq("status", "concluido")
+      .in("status", ["concluido", "finalizado"])
       .not("consultor", "is", null)
       .order("consultor")
 
@@ -377,7 +389,7 @@ export async function getConsultantCommissions(
     let query = supabase
       .from("metrics_consultoria")
       .select("consultor, valor_comissao")
-      .eq("status", "concluido")
+      .in("status", ["concluido", "finalizado"])
       .in("consultor", consultores)
       .not("valor_comissao", "is", null)
 

@@ -69,7 +69,14 @@ export default function NewConsultingProjectPage() {
           title: "Projeto criado",
           description: `O projeto para ${data.cliente} foi criado com sucesso.`,
         })
-        router.push("/consultoria/projetos")
+
+        // Forçar um pequeno delay antes do redirecionamento para garantir que o toast seja exibido
+        setTimeout(() => {
+          // Redirecionar para a página de detalhes do projeto recém-criado
+          router.push(`/consultoria/projetos/${result.id}`)
+          // Forçar um refresh da página para garantir que os dados sejam carregados
+          router.refresh()
+        }, 1000)
       } else {
         throw new Error("Falha ao criar projeto")
       }
@@ -269,7 +276,7 @@ export default function NewConsultingProjectPage() {
                           </FormControl>
                           <SelectContent>
                             {porteOptions.map((option) => (
-                              <SelectItem key={option} value={option}>
+                              <SelectItem key={option} value={option.toLowerCase()}>
                                 {option}
                               </SelectItem>
                             ))}

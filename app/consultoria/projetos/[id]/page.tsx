@@ -30,10 +30,13 @@ export default function ProjectDetailsPage() {
   const fetchProject = async (id: string) => {
     setIsLoading(true)
     try {
+      console.log(`Buscando projeto com ID: ${id}`) // Log para debug
       const data = await getConsultingProjectById(id)
       if (data) {
+        console.log("Projeto encontrado:", data) // Log para debug
         setProject(data)
       } else {
+        console.log("Projeto não encontrado") // Log para debug
         toast({
           title: "Projeto não encontrado",
           description: "O projeto solicitado não foi encontrado.",
@@ -139,7 +142,7 @@ export default function ProjectDetailsPage() {
                 </div>
               </div>
               <div className="text-right">
-                <div className="text-2xl font-bold">{formatCurrency(project.valor_consultoria)}</div>
+                <div className="text-2xl font-bold">{formatCurrency(Number(project.valor_consultoria) || 0)}</div>
                 <p className="text-sm text-muted-foreground">Valor do Projeto</p>
               </div>
             </div>
@@ -194,14 +197,14 @@ export default function ProjectDetailsPage() {
                     <DollarSign className="h-5 w-5 text-muted-foreground" />
                     <div>
                       <p className="text-sm text-muted-foreground">Valor da Consultoria</p>
-                      <p className="font-medium">{formatCurrency(project.valor_consultoria)}</p>
+                      <p className="font-medium">{formatCurrency(Number(project.valor_consultoria) || 0)}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
                     <DollarSign className="h-5 w-5 text-muted-foreground" />
                     <div>
                       <p className="text-sm text-muted-foreground">Valor de Bônus</p>
-                      <p className="font-medium">{formatCurrency(project.valor_bonus)}</p>
+                      <p className="font-medium">{formatCurrency(Number(project.valor_bonus) || 0)}</p>
                     </div>
                   </div>
                   {project.valor_liquido_projeto !== undefined && (
@@ -209,7 +212,7 @@ export default function ProjectDetailsPage() {
                       <DollarSign className="h-5 w-5 text-muted-foreground" />
                       <div>
                         <p className="text-sm text-muted-foreground">Valor Líquido</p>
-                        <p className="font-medium">{formatCurrency(project.valor_liquido_projeto)}</p>
+                        <p className="font-medium">{formatCurrency(Number(project.valor_liquido_projeto) || 0)}</p>
                       </div>
                     </div>
                   )}
@@ -219,7 +222,7 @@ export default function ProjectDetailsPage() {
                       <div>
                         <p className="text-sm text-muted-foreground">Comissão</p>
                         <p className="font-medium">
-                          {formatCurrency(project.valor_comissao)}
+                          {formatCurrency(Number(project.valor_comissao) || 0)}
                           {project.percentual_comissao && ` (${project.percentual_comissao}%)`}
                         </p>
                       </div>
@@ -321,7 +324,11 @@ export default function ProjectDetailsPage() {
         ) : (
           <div className="text-center py-8">
             <p className="text-muted-foreground">Projeto não encontrado</p>
-            <Button variant="outline" className="mt-4" onClick={() => router.push("/consultoria/projetos")}>
+            <Button
+              variant="outline"
+              className="mt-4 bg-transparent"
+              onClick={() => router.push("/consultoria/projetos")}
+            >
               Voltar para Lista de Projetos
             </Button>
           </div>

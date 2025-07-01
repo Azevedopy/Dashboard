@@ -28,7 +28,7 @@ export async function getConsultingProjects(
       query = query.eq("status", filters.status)
     }
 
-    if (filters.consultor) {
+    if (filters.consultor && filters.consultor !== "todos") {
       query = query.eq("consultor", filters.consultor)
     }
 
@@ -74,6 +74,8 @@ export async function getConsultingProjectById(id: string): Promise<ConsultingPr
       return mockProjects.find((p) => p.id === id) || mockProjects[0]
     }
 
+    console.log(`Buscando projeto com ID: ${id}`) // Log para debug
+
     const { data, error } = await supabase.from("metrics_consultoria").select("*").eq("id", id).single()
 
     if (error) {
@@ -81,6 +83,7 @@ export async function getConsultingProjectById(id: string): Promise<ConsultingPr
       return null
     }
 
+    console.log("Projeto encontrado:", data) // Log para debug
     return data
   } catch (error) {
     console.error("Unexpected error fetching consulting project:", error)
@@ -110,6 +113,10 @@ export async function createConsultingProject(
     const projectData = {
       ...project,
       status: project.status || "em_andamento",
+      // Garantir que campos numéricos sejam números
+      valor_consultoria: Number(project.valor_consultoria),
+      valor_bonus: Number(project.valor_bonus),
+      tempo_dias: Number(project.tempo_dias),
     }
 
     console.log("Criando projeto com dados:", projectData) // Log para debug
@@ -145,9 +152,21 @@ export async function updateConsultingProject(project: Partial<ConsultingProject
       } as ConsultingProject
     }
 
+    // Garantir que campos numéricos sejam números
+    const projectData = { ...project }
+    if (projectData.valor_consultoria !== undefined) {
+      projectData.valor_consultoria = Number(projectData.valor_consultoria)
+    }
+    if (projectData.valor_bonus !== undefined) {
+      projectData.valor_bonus = Number(projectData.valor_bonus)
+    }
+    if (projectData.tempo_dias !== undefined) {
+      projectData.tempo_dias = Number(projectData.tempo_dias)
+    }
+
     const { data, error } = await supabase
       .from("metrics_consultoria")
-      .update(project)
+      .update(projectData)
       .eq("id", project.id)
       .select()
       .single()
@@ -216,7 +235,8 @@ export async function getConsultingStats(
     let validRatingCount = 0
     projects.forEach((project) => {
       if (project.avaliacao_estrelas) {
-        totalRating += project.avaliacao_estrelas
+        // Usar o nome correto do campo
+        totalRating += Number(project.avaliacao_estrelas)
         validRatingCount++
       }
     })
@@ -224,18 +244,19 @@ export async function getConsultingStats(
 
     let totalRevenue = 0
     projects.forEach((project) => {
-      totalRevenue += project.valor_consultoria || 0
+      totalRevenue += Number(project.valor_consultoria) || 0 // Usar o nome correto do campo
     })
 
     let totalDuration = 0
     projects.forEach((project) => {
-      totalDuration += project.tempo_dias || 0
+      totalDuration += Number(project.tempo_dias) || 0 // Usar o nome correto do campo
     })
     const averageProjectDuration = totalProjects > 0 ? totalDuration / totalProjects : 0
 
     let deadlineComplianceCount = 0
     projects.forEach((project) => {
       if (project.prazo_atingido) {
+        // Usar o nome correto do campo
         deadlineComplianceCount++
       }
     })
@@ -256,7 +277,7 @@ export async function getConsultingStats(
   }
 }
 
-// Function to get unique consultant names - CORRIGIDA
+// Function to get unique consultant names
 export async function getConsultores(): Promise<string[]> {
   try {
     console.log("🔍 Buscando consultores...")
@@ -272,7 +293,7 @@ export async function getConsultores(): Promise<string[]> {
     // Buscar todos os consultores únicos da tabela metrics_consultoria
     const { data, error } = await supabase
       .from("metrics_consultoria")
-      .select("consultor")
+      .select("consultor") // Usar o nome correto do campo
       .not("consultor", "is", null)
       .order("consultor")
 
@@ -316,16 +337,16 @@ export async function createConsultingMetric(metric: ConsultingMetric): Promise<
       consultor: metric.consultor,
       data_inicio: metric.start_date,
       data_termino: metric.end_date,
-      tempo_dias: metric.duration,
+      tempo_dias: Number(metric.duration),
       porte: metric.size,
       porte_detalhado: metric.size_detail,
       data_fechamento: metric.closing_date,
       data_virada: metric.turning_date,
-      valor_consultoria: metric.consulting_value,
-      valor_bonus: metric.bonus_8_percent,
-      valor_bonus_12: metric.bonus_12_percent,
+      valor_consultoria: Number(metric.consulting_value),
+      valor_bonus: Number(metric.bonus_8_percent),
+      valor_bonus_12: Number(metric.bonus_12_percent),
       status: metric.status,
-      // Removido o campo member_id que não existe na tabela
+      valor_liquido_projeto: metric.valor_liquido_projeto ? Number(metric.valor_liquido_projeto) : null,
     }
 
     const { data, error } = await supabase.from("metrics_consultoria").insert([projectData])
@@ -358,6 +379,7 @@ function getMockConsultingProjects(): ConsultingProject[] {
       tempo_dias: 45,
       porte: "pro",
       valor_consultoria: 15000,
+      valor_bonus: 0,
       status: "em_andamento",
       created_at: "2024-05-01T10:00:00Z",
       updated_at: "2024-05-01T10:00:00Z",
@@ -372,57 +394,12 @@ function getMockConsultingProjects(): ConsultingProject[] {
       tempo_dias: 30,
       porte: "starter",
       valor_consultoria: 8000,
+      valor_bonus: 0,
       status: "concluido",
       avaliacao_estrelas: 5,
       prazo_atingido: true,
       created_at: "2024-04-15T09:30:00Z",
       updated_at: "2024-05-15T16:45:00Z",
-    },
-    {
-      id: "mock-3",
-      cliente: "Corporação 123",
-      tipo: "Migração",
-      consultor: "Mariana Santos",
-      data_inicio: "2024-05-10",
-      data_termino: "2024-07-10",
-      tempo_dias: 60,
-      porte: "enterprise",
-      valor_consultoria: 25000,
-      status: "em_andamento",
-      created_at: "2024-05-10T14:20:00Z",
-      updated_at: "2024-05-10T14:20:00Z",
-    },
-    {
-      id: "mock-4",
-      cliente: "Loja Virtual",
-      tipo: "Otimização",
-      consultor: "Pedro Costa",
-      data_inicio: "2024-03-01",
-      data_termino: "2024-03-15",
-      tempo_dias: 15,
-      porte: "basic",
-      valor_consultoria: 5000,
-      status: "concluido",
-      avaliacao_estrelas: 4,
-      prazo_atingido: true,
-      created_at: "2024-03-01T08:15:00Z",
-      updated_at: "2024-03-15T17:30:00Z",
-    },
-    {
-      id: "mock-5",
-      cliente: "Agência Digital",
-      tipo: "Treinamento",
-      consultor: "Juliana Lima",
-      data_inicio: "2024-04-20",
-      data_termino: "2024-05-05",
-      tempo_dias: 15,
-      porte: "starter",
-      valor_consultoria: 7500,
-      status: "concluido",
-      avaliacao_estrelas: 5,
-      prazo_atingido: false,
-      created_at: "2024-04-20T11:45:00Z",
-      updated_at: "2024-05-05T15:10:00Z",
     },
   ]
 }
@@ -430,12 +407,12 @@ function getMockConsultingProjects(): ConsultingProject[] {
 // Função para gerar estatísticas de consultoria mockadas
 function getMockConsultingStats(): ConsultingStats {
   return {
-    totalProjects: 5,
-    activeProjects: 2,
-    completedProjects: 3,
-    averageRating: 4.7,
-    totalRevenue: 60500,
-    averageProjectDuration: 33,
-    deadlineComplianceRate: 66.7,
+    totalProjects: 2,
+    activeProjects: 1,
+    completedProjects: 1,
+    averageRating: 5,
+    totalRevenue: 23000,
+    averageProjectDuration: 37.5,
+    deadlineComplianceRate: 100,
   }
 }

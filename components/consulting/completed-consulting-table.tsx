@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { formatCurrency } from "@/lib/utils"
 import type { ConsultingProject } from "@/lib/types"
+import { useRouter } from "next/navigation"
 
 interface CompletedConsultingTableProps {
   projects: ConsultingProject[]
@@ -20,6 +21,7 @@ interface CompletedConsultingTableProps {
 
 export function CompletedConsultingTable({ projects, isLoading }: CompletedConsultingTableProps) {
   const [searchTerm, setSearchTerm] = useState("")
+  const router = useRouter()
 
   // Verificar se estamos em ambiente de preview
   const isPreview = typeof window !== "undefined" && window.location.hostname.includes("v0.dev")
@@ -76,13 +78,13 @@ export function CompletedConsultingTable({ projects, isLoading }: CompletedConsu
     if (isPreview) {
       alert("Funcionalidade indisponível no modo preview")
     } else {
-      window.location.href = `/consultoria/projetos/${id}`
+      router.push(`/consultoria/projetos/${id}`)
     }
   }
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between p-4">
         <Input
           placeholder="Buscar por cliente, consultor, tipo ou porte..."
           className="max-w-sm"
@@ -130,7 +132,9 @@ export function CompletedConsultingTable({ projects, isLoading }: CompletedConsu
             ) : filteredProjects.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={11} className="h-24 text-center">
-                  Nenhum projeto encontrado.
+                  {searchTerm
+                    ? "Nenhum projeto encontrado com os critérios de busca."
+                    : "Nenhuma consultoria concluída encontrada."}
                 </TableCell>
               </TableRow>
             ) : (
@@ -144,11 +148,11 @@ export function CompletedConsultingTable({ projects, isLoading }: CompletedConsu
                     {formatDate(project.data_inicio)} - {formatDate(project.data_termino)}
                   </TableCell>
                   <TableCell>{project.tempo_dias}</TableCell>
-                  <TableCell>{formatCurrency(project.valor_consultoria)}</TableCell>
+                  <TableCell>{formatCurrency(Number(project.valor_consultoria) || 0)}</TableCell>
                   <TableCell>{renderStars(project.avaliacao_estrelas)}</TableCell>
                   <TableCell>
                     {project.valor_comissao
-                      ? `${formatCurrency(project.valor_comissao)} (${project.percentual_comissao || 0}%)`
+                      ? `${formatCurrency(Number(project.valor_comissao))} (${project.percentual_comissao || 0}%)`
                       : "N/A"}
                   </TableCell>
                   <TableCell>{formatDate(project.data_finalizacao)}</TableCell>

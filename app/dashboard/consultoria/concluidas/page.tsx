@@ -1,39 +1,25 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect } from "react"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
-import { CalendarIcon, Download, RefreshCw } from "lucide-react"
+import { CalendarIcon, Download, Filter, RefreshCw } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { CompletedConsultingStats } from "@/components/consulting/completed-consulting-stats"
 import { CompletedConsultingTable } from "@/components/consulting/completed-consulting-table"
-import { ConsultantCommissionChart } from "@/components/consulting/consultant-commission-chart"
-import { cn } from "@/lib/utils"
+import { CompletedConsultingStats } from "@/components/consulting/completed-consulting-stats"
+import { getConsultingProjects, getConsultores } from "@/lib/consulting-service"
 import { exportToExcel } from "@/lib/export-utils"
 import { toast } from "@/components/ui/use-toast"
-import {
-  getCompletedConsultingProjects,
-  getCompletedConsultingStats,
-  getCompletedConsultores,
-} from "@/lib/completed-consulting-service"
-import type { ConsultingProject, ConsultingStats } from "@/lib/types"
+import { Toaster } from "@/components/ui/toaster"
+import type { ConsultingProject } from "@/lib/types"
 
-export default function ConsultoriasConcluidasPage() {
+export default function ConsultoriasConcluidas() {
   const [projects, setProjects] = useState<ConsultingProject[]>([])
-  const [stats, setStats] = useState<ConsultingStats>({
-    totalProjects: 0,
-    activeProjects: 0,
-    completedProjects: 0,
-    averageRating: 0,
-    totalRevenue: 0,
-    averageProjectDuration: 0,
-    deadlineComplianceRate: 0,
-  })
   const [consultores, setConsultores] = useState<string[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [filters, setFilters] = useState({
@@ -44,80 +30,71 @@ export default function ConsultoriasConcluidasPage() {
       to: undefined as Date | undefined,
     },
   })
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false)
 
-  // Verificar se estamos em ambiente de preview
-  const isPreview = typeof window !== "undefined" && window.location.hostname.includes("v0.dev")
+  useEffect(() => {
+    fetchData()
+  }, [])
 
-  // Função de busca de dados refatorada para ser chamada em diferentes contextos
-  const fetchData = useCallback(async () => {
+  const fetchData = async () => {
     setIsLoading(true)
     try {
-      // Preparar filtros
-      const apiFilters: {
-        startDate?: string
-        endDate?: string
-        consultor?: string
-      } = {}
+      console.log("🔄 Buscando consultorias concluídas...")
+
+      // Buscar lista de consultores
+      const consultoresList = await getConsultores()
+      setConsultores(consultoresList)
+
+      // Aplicar filtros para consultorias concluídas
+      const filterParams: any = {
+        status: "concluido", // Apenas projetos concluídos
+      }
+
+      console.log("Buscando projetos concluídos com filtros:", filterParams)
+
+      if (filters.consultor !== "todos") {
+        filterParams.consultor = filters.consultor
+      }
 
       if (filters.dateRange.from) {
-        apiFilters.startDate = format(filters.dateRange.from, "yyyy-MM-dd")
+        filterParams.startDate = format(filters.dateRange.from, "yyyy-MM-dd")
       }
+
       if (filters.dateRange.to) {
-        apiFilters.endDate = format(filters.dateRange.to, "yyyy-MM-dd")
-      }
-      if (filters.consultor !== "todos") {
-        apiFilters.consultor = filters.consultor
+        filterParams.endDate = format(filters.dateRange.to, "yyyy-MM-dd")
       }
 
-      console.log("Buscando dados com os filtros:", apiFilters)
-
-      // Buscar dados
-      const [projectsData, statsData, consultoresData] = await Promise.all([
-        getCompletedConsultingProjects(apiFilters),
-        getCompletedConsultingStats(apiFilters),
-        getCompletedConsultores(),
-      ])
+      // Buscar projetos concluídos
+      const projectsData = await getConsultingProjects(filterParams)
+      console.log(`✅ Projetos concluídos encontrados: ${projectsData.length}`)
+      console.log("Dados dos projetos concluídos:", projectsData.slice(0, 3))
 
       // Filtrar por tipo se necessário
       let filteredProjects = projectsData
       if (filters.tipo !== "todos") {
-        filteredProjects = projectsData.filter((project) => project.tipo?.toLowerCase() === filters.tipo.toLowerCase())
+        filteredProjects = projectsData.filter((project) => project.tipo.toLowerCase() === filters.tipo.toLowerCase())
+        console.log(`Após filtro de tipo: ${filteredProjects.length} projetos`)
       }
 
-      console.log(`Total de projetos encontrados: ${filteredProjects.length}`)
       setProjects(filteredProjects)
-      setStats(statsData)
-      setConsultores(consultoresData)
-
-      // Mostrar toast de sucesso ao atualizar manualmente
-      if (!isLoading) {
-        toast({
-          title: "Dados atualizados",
-          description: `${filteredProjects.length} consultorias concluídas encontradas.`,
-        })
-      }
     } catch (error) {
-      console.error("Error fetching data:", error)
+      console.error("❌ Erro ao buscar dados:", error)
       toast({
-        title: "Erro ao buscar dados",
-        description: "Ocorreu um erro ao carregar as consultorias concluídas.",
+        title: "Erro",
+        description: "Não foi possível carregar os dados. Tente novamente.",
         variant: "destructive",
       })
-
-      // Em caso de erro, definir dados vazios ou mockados
-      setProjects([])
-      setConsultores([])
     } finally {
       setIsLoading(false)
     }
-  }, [filters, isLoading])
+  }
 
-  // Buscar dados na inicialização
-  useEffect(() => {
+  const handleFilter = () => {
     fetchData()
-  }, [fetchData])
+    setIsCalendarOpen(false)
+  }
 
-  const handleExport = () => {
+  const handleExport = async () => {
     try {
       if (!projects.length) {
         toast({
@@ -132,29 +109,24 @@ export default function ConsultoriasConcluidasPage() {
         Tipo: project.tipo,
         Porte: project.porte,
         Consultor: project.consultor || "Não atribuído",
-        "Data de Início": project.data_inicio,
-        "Data de Término": project.data_termino,
-        "Data de Finalização": project.data_finalizacao,
+        "Data de Início": project.data_inicio ? format(new Date(project.data_inicio), "dd/MM/yyyy") : "N/A",
+        "Data de Término": project.data_termino ? format(new Date(project.data_termino), "dd/MM/yyyy") : "N/A",
+        "Data de Conclusão": project.data_finalizacao
+          ? format(new Date(project.data_finalizacao), "dd/MM/yyyy")
+          : "N/A",
         "Duração (dias)": project.tempo_dias,
         "Valor da Consultoria": project.valor_consultoria,
-        "Valor da Comissão": project.valor_comissao || 0,
-        "Percentual de Comissão": project.percentual_comissao || 0,
-        "Avaliação (Estrelas)": project.avaliacao_estrelas || "N/A",
-        "Prazo Atingido": project.prazo_atingido ? "Sim" : "Não",
+        "Avaliação (estrelas)": project.avaliacao_estrelas || "N/A",
+        "Comissão (%)": project.percentual_comissao || "N/A",
+        "Valor da Comissão": project.valor_comissao || "N/A",
+        "Prazo Atingido": project.prazo_atingido ? "SIM" : "NÃO",
       }))
 
-      if (isPreview) {
-        toast({
-          title: "Modo Preview",
-          description: "A exportação não está disponível no modo preview.",
-        })
-      } else {
-        exportToExcel(dataToExport, "consultorias_concluidas")
-        toast({
-          title: "Sucesso",
-          description: "Dados exportados com sucesso",
-        })
-      }
+      exportToExcel(dataToExport, "consultorias_concluidas")
+      toast({
+        title: "Sucesso",
+        description: "Dados exportados com sucesso",
+      })
     } catch (error) {
       console.error("Error exporting data:", error)
       toast({
@@ -165,119 +137,126 @@ export default function ConsultoriasConcluidasPage() {
     }
   }
 
-  // Atualizar manualmente a lista
-  const handleRefresh = () => {
-    fetchData()
-  }
-
   return (
     <div className="flex flex-col h-full">
       <div className="p-6 bg-[#0056D6] text-white">
-        <h1 className="text-2xl font-bold text-white">
-          Consultorias Concluídas {isPreview && <span className="text-sm font-normal text-white/80">(Preview)</span>}
-        </h1>
-        <p className="text-sm text-white/90">Visualize e analise todas as consultorias que foram concluídas.</p>
+        <h1 className="text-2xl font-bold text-white">Consultorias Concluídas</h1>
+        <p className="text-sm text-white/90">Visualize e analise os projetos de consultoria finalizados</p>
       </div>
 
       <div className="p-6 space-y-6">
-        <div className="flex items-center justify-between flex-wrap gap-4">
-          <div>
-            <h2 className="text-xl font-semibold">Resumo</h2>
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <Select value={filters.consultor} onValueChange={(value) => setFilters({ ...filters, consultor: value })}>
-              <SelectTrigger className="w-[200px]">
-                <SelectValue placeholder="Selecione um consultor" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todos">Todos os consultores</SelectItem>
-                {consultores.map((consultor) => (
-                  <SelectItem key={consultor} value={consultor}>
-                    {consultor}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+        {/* Estatísticas */}
+        <CompletedConsultingStats projects={projects} isLoading={isLoading} />
 
-            <Select value={filters.tipo} onValueChange={(value) => setFilters({ ...filters, tipo: value })}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Selecione um tipo" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todos">Todos os tipos</SelectItem>
-                <SelectItem value="consultoria">Consultoria</SelectItem>
-                <SelectItem value="upsell">Upsell</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  id="date"
-                  variant={"outline"}
-                  className={cn(
-                    "w-[260px] justify-start text-left font-normal",
-                    !filters.dateRange.from && !filters.dateRange.to && "text-muted-foreground",
-                  )}
+        {/* Filtros */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Filtros</CardTitle>
+            <CardDescription>Filtre os projetos concluídos por consultor, tipo e período</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col md:flex-row gap-4">
+              <div className="w-full md:w-1/4">
+                <label className="text-sm font-medium mb-2 block">Consultor</label>
+                <Select
+                  value={filters.consultor}
+                  onValueChange={(value) => setFilters({ ...filters, consultor: value })}
                 >
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {filters.dateRange.from ? (
-                    filters.dateRange.to ? (
-                      <>
-                        {format(filters.dateRange.from, "dd/MM/yyyy", { locale: ptBR })} -{" "}
-                        {format(filters.dateRange.to, "dd/MM/yyyy", { locale: ptBR })}
-                      </>
-                    ) : (
-                      format(filters.dateRange.from, "dd/MM/yyyy", { locale: ptBR })
-                    )
-                  ) : (
-                    "Selecione um período"
-                  )}
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione um consultor" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todos os consultores</SelectItem>
+                    {consultores.map((consultor) => (
+                      <SelectItem key={consultor} value={consultor}>
+                        {consultor}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="w-full md:w-1/4">
+                <label className="text-sm font-medium mb-2 block">Tipo</label>
+                <Select value={filters.tipo} onValueChange={(value) => setFilters({ ...filters, tipo: value })}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione um tipo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todos os tipos</SelectItem>
+                    <SelectItem value="consultoria">Consultoria</SelectItem>
+                    <SelectItem value="upsell">Upsell</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="w-full md:w-1/4">
+                <label className="text-sm font-medium mb-2 block">Período de Conclusão</label>
+                <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className="w-full justify-start text-left font-normal bg-transparent">
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {filters.dateRange.from && filters.dateRange.to ? (
+                        <>
+                          {format(filters.dateRange.from, "dd/MM/yyyy", { locale: ptBR })} -{" "}
+                          {format(filters.dateRange.to, "dd/MM/yyyy", { locale: ptBR })}
+                        </>
+                      ) : filters.dateRange.from ? (
+                        format(filters.dateRange.from, "dd/MM/yyyy", { locale: ptBR })
+                      ) : (
+                        "Todos os períodos"
+                      )}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="range"
+                      selected={filters.dateRange}
+                      onSelect={(range) => {
+                        if (range?.from && range?.to) {
+                          setFilters({ ...filters, dateRange: range as { from: Date; to: Date } })
+                        }
+                      }}
+                      numberOfMonths={2}
+                      locale={ptBR}
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              <div className="w-full md:w-1/4 flex items-end gap-2">
+                <Button onClick={handleFilter} className="flex-1">
+                  <Filter className="mr-2 h-4 w-4" />
+                  Filtrar
                 </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="end">
-                <Calendar
-                  initialFocus
-                  mode="range"
-                  defaultMonth={filters.dateRange.from}
-                  selected={filters.dateRange}
-                  onSelect={(range) =>
-                    setFilters({ ...filters, dateRange: range || { from: undefined, to: undefined } })
-                  }
-                  numberOfMonths={2}
-                  locale={ptBR}
-                />
-              </PopoverContent>
-            </Popover>
-            <Button variant="outline" onClick={handleExport}>
-              <Download className="mr-2 h-4 w-4" />
-              Exportar
-            </Button>
-            <Button variant="outline" size="icon" onClick={handleRefresh}>
-              <RefreshCw className="h-4 w-4" />
-            </Button>
+                <Button variant="outline" onClick={handleExport} disabled={!projects.length}>
+                  <Download className="mr-2 h-4 w-4" />
+                  Exportar
+                </Button>
+                <Button variant="outline" size="icon" onClick={fetchData}>
+                  <RefreshCw className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Cabeçalho da tabela */}
+        <div className="flex justify-between items-center">
+          <h2 className="text-xl font-semibold">Projetos Concluídos</h2>
+          <div className="text-sm text-muted-foreground">
+            Total: {projects.length} projeto{projects.length !== 1 ? "s" : ""}
           </div>
         </div>
 
-        <CompletedConsultingStats stats={stats} isLoading={isLoading} />
-
-        <Tabs defaultValue="projetos">
-          <TabsList>
-            <TabsTrigger value="projetos">Projetos</TabsTrigger>
-            <TabsTrigger value="comissoes">Comissões</TabsTrigger>
-          </TabsList>
-          <TabsContent value="projetos" className="space-y-4 mt-4">
+        {/* Tabela de projetos concluídos */}
+        <Card>
+          <CardContent className="p-0">
             <CompletedConsultingTable projects={projects} isLoading={isLoading} />
-          </TabsContent>
-          <TabsContent value="comissoes" className="space-y-4 mt-4">
-            <ConsultantCommissionChart
-              consultores={consultores}
-              startDate={filters.dateRange.from ? format(filters.dateRange.from, "yyyy-MM-dd") : undefined}
-              endDate={filters.dateRange.to ? format(filters.dateRange.to, "yyyy-MM-dd") : undefined}
-            />
-          </TabsContent>
-        </Tabs>
+          </CardContent>
+        </Card>
       </div>
+      <Toaster />
     </div>
   )
 }

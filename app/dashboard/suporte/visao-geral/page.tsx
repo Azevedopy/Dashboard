@@ -21,20 +21,10 @@ export default function VisaoGeralPage() {
   const [isPreview] = useState(typeof window !== "undefined" && window.location.hostname.includes("v0.dev"))
 
   useEffect(() => {
-    if (isPreview) {
-      // Simular carregamento em ambiente de preview
-      const timer = setTimeout(() => {
-        setIsLoading(false)
-      }, 1500)
-      return () => clearTimeout(timer)
-    } else {
-      fetchData()
-    }
-  }, [period, isPreview])
+    fetchData()
+  }, [period])
 
   const fetchData = async () => {
-    if (isPreview) return // Não buscar dados em preview
-
     setIsLoading(true)
     try {
       let startDate
@@ -57,56 +47,59 @@ export default function VisaoGeralPage() {
 
       try {
         // Buscar métricas calculadas de suporte COM FILTRO DE DATA
+        console.log("📈 Iniciando busca de métricas de suporte...")
         const supportMetricsData = await getSupportMetrics(startDate, endDate)
         console.log("📈 Support metrics calculated for period:", supportMetricsData)
         setSupportMetrics(supportMetricsData)
 
         // Buscar métricas gerais com filtro de data
+        console.log("📊 Iniciando busca de métricas gerais...")
         const metricsData = await getMetrics(startDate, endDate)
         console.log(`📊 Fetched ${metricsData.length} metrics for support dashboard (${period})`)
         setMetrics(metricsData)
+
+        // Mostrar toast de sucesso apenas se não estivermos em preview
+        if (!isPreview) {
+          toast({
+            title: "Dados carregados com sucesso",
+            description: `Métricas atualizadas para o período de ${period.replace("d", " dias")}.`,
+          })
+        }
       } catch (fetchError) {
         console.error("❌ Error fetching specific data:", fetchError)
-        toast({
-          title: "Erro ao carregar dados específicos",
-          description: "Alguns dados podem estar incompletos. Usando dados de exemplo.",
-          variant: "destructive",
-        })
 
-        // Definir dados vazios para evitar erros de renderização
-        setMetrics([])
+        // Em caso de erro, ainda definir dados padrão para evitar erros de renderização
         setSupportMetrics(null)
+        setMetrics([])
+
+        toast({
+          title: "Erro ao carregar dados",
+          description: isPreview
+            ? "Dados de demonstração carregados para ambiente de preview."
+            : "Alguns dados podem estar incompletos. Verifique sua conexão.",
+          variant: isPreview ? "default" : "destructive",
+        })
       }
     } catch (error) {
       console.error("❌ Error in overall fetch process:", error)
-      toast({
-        title: "Erro ao carregar dados",
-        description: "Não foi possível carregar os dados. Tente novamente mais tarde.",
-        variant: "destructive",
-      })
 
       // Definir dados vazios para evitar erros de renderização
       setMetrics([])
       setSupportMetrics(null)
+
+      toast({
+        title: "Erro ao carregar dados",
+        description: isPreview
+          ? "Dados de demonstração carregados para ambiente de preview."
+          : "Não foi possível carregar os dados. Tente novamente mais tarde.",
+        variant: isPreview ? "default" : "destructive",
+      })
     } finally {
       setIsLoading(false)
     }
   }
 
   const handleRefresh = async () => {
-    if (isPreview) {
-      // Simular atualização em ambiente de preview
-      setIsRefreshing(true)
-      setTimeout(() => {
-        setIsRefreshing(false)
-        toast({
-          title: "Dados atualizados",
-          description: `Os dados foram atualizados para o período selecionado (${period}).`,
-        })
-      }, 1500)
-      return
-    }
-
     setIsRefreshing(true)
     await fetchData()
     setIsRefreshing(false)
@@ -125,12 +118,21 @@ export default function VisaoGeralPage() {
       return
     }
 
-    console.log("🔍 Executando diagnóstico completo...")
-    await runDiagnostics()
-    toast({
-      title: "Diagnóstico executado",
-      description: "Verifique o console para ver os resultados detalhados.",
-    })
+    try {
+      console.log("🔍 Executando diagnóstico completo...")
+      await runDiagnostics()
+      toast({
+        title: "Diagnóstico executado",
+        description: "Verifique o console para ver os resultados detalhados.",
+      })
+    } catch (error) {
+      console.error("❌ Erro ao executar diagnóstico:", error)
+      toast({
+        title: "Erro no diagnóstico",
+        description: "Não foi possível executar o diagnóstico completo.",
+        variant: "destructive",
+      })
+    }
   }
 
   const getPeriodLabel = () => {

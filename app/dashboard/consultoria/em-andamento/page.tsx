@@ -177,13 +177,13 @@ export default function ConsultoriasEmAndamentoPage() {
         description: `A consultoria para ${project.cliente} foi finalizada com sucesso.`,
       })
 
-      // Recarregar dados após finalizar
-      fetchData()
+      // Recarregar dados após finalizar para remover da lista atual
+      await fetchData()
 
-      // Redirecionar para a página de consultorias concluídas
+      // Aguardar um pouco antes de redirecionar para garantir que os dados foram salvos
       setTimeout(() => {
         router.push("/dashboard/consultoria/concluidas")
-      }, 1500)
+      }, 2000)
     } catch (error) {
       console.error("Error finalizing project:", error)
       toast({
@@ -285,7 +285,7 @@ export default function ConsultoriasEmAndamentoPage() {
                 <label className="text-sm font-medium mb-2 block">Período</label>
                 <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
                   <PopoverTrigger asChild>
-                    <Button variant="outline" className="w-full justify-start text-left font-normal">
+                    <Button variant="outline" className="w-full justify-start text-left font-normal bg-transparent">
                       <CalendarIcon className="mr-2 h-4 w-4" />
                       {filters.dateRange.from && filters.dateRange.to ? (
                         <>
