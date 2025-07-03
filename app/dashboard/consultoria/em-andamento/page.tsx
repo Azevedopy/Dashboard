@@ -26,8 +26,8 @@ export default function ConsultoriasEmAndamentoPage() {
     consultor: "todos",
     tipo: "todos",
     dateRange: {
-      from: undefined, // Remover restrição de data inicial
-      to: undefined, // Remover restrição de data final
+      from: undefined as Date | undefined,
+      to: undefined as Date | undefined,
     },
   })
   const [isCalendarOpen, setIsCalendarOpen] = useState(false)
@@ -49,7 +49,7 @@ export default function ConsultoriasEmAndamentoPage() {
         status: "em_andamento", // Apenas projetos em andamento
       }
 
-      console.log("Buscando projetos em andamento com filtros:", filterParams) // Log para debug
+      console.log("Buscando projetos em andamento com filtros:", filterParams)
 
       if (filters.consultor !== "todos") {
         filterParams.consultor = filters.consultor
@@ -66,14 +66,16 @@ export default function ConsultoriasEmAndamentoPage() {
 
       // Buscar projetos
       const projectsData = await getConsultingProjects(filterParams)
-      console.log(`Projetos em andamento encontrados: ${projectsData.length}`) // Log para debug
-      console.log("Dados dos projetos:", projectsData) // Log adicional para debug
+      console.log(`Projetos em andamento encontrados: ${projectsData.length}`)
+      console.log("Dados dos projetos:", projectsData)
 
       // Filtrar por tipo se necessário
       let filteredProjects = projectsData
       if (filters.tipo !== "todos") {
-        filteredProjects = projectsData.filter((project) => project.tipo.toLowerCase() === filters.tipo.toLowerCase())
-        console.log(`Após filtro de tipo: ${filteredProjects.length} projetos`) // Log para debug
+        filteredProjects = projectsData.filter(
+          (project) => project.tipo && project.tipo.toLowerCase() === filters.tipo.toLowerCase(),
+        )
+        console.log(`Após filtro de tipo: ${filteredProjects.length} projetos`)
       }
 
       setProjects(filteredProjects)
@@ -105,15 +107,20 @@ export default function ConsultoriasEmAndamentoPage() {
       }
 
       const dataToExport = projects.map((project) => ({
-        Cliente: project.cliente,
-        Tipo: project.tipo,
-        Porte: project.porte,
+        Cliente: project.cliente || "N/A",
+        Tipo: project.tipo || "N/A",
+        Porte: project.porte || "N/A",
         Consultor: project.consultor || "Não atribuído",
-        "Data de Início": format(new Date(project.data_inicio), "dd/MM/yyyy"),
-        "Data de Término Prevista": format(new Date(project.data_termino), "dd/MM/yyyy"),
-        "Duração (dias)": project.tempo_dias,
-        "Valor da Consultoria": project.valor_consultoria,
-        "Prazo Atingido": isPrazoAtingido(project.tipo, project.tempo_dias) ? "SIM" : "NÃO",
+        "Data de Início": project.data_inicio ? format(new Date(project.data_inicio), "dd/MM/yyyy") : "N/A",
+        "Data de Término Prevista": project.data_termino ? format(new Date(project.data_termino), "dd/MM/yyyy") : "N/A",
+        "Duração (dias)": project.tempo_dias || 0,
+        "Valor da Consultoria": project.valor_consultoria || 0,
+        "Prazo Atingido":
+          project.tipo && project.tempo_dias
+            ? isPrazoAtingido(project.tipo, project.tempo_dias)
+              ? "SIM"
+              : "NÃO"
+            : "N/A",
       }))
 
       exportToExcel(dataToExport, "consultorias_em_andamento")
@@ -135,38 +142,40 @@ export default function ConsultoriasEmAndamentoPage() {
     try {
       setIsLoading(true)
 
-      // Buscar o projeto atual
-      const project = projects.find((p) => p.id === id)
+      // Buscar o projeto atual com verificação de segurança
+      const project = projects.find((p) => p && p.id === id)
       if (!project) {
+        console.error("Projeto não encontrado com ID:", id)
+        console.log(
+          "Projetos disponíveis:",
+          projects.map((p) => ({ id: p?.id, cliente: p?.cliente })),
+        )
         throw new Error("Projeto não encontrado")
       }
 
+      console.log("Projeto encontrado para finalização:", project)
+
       // Verificar se o prazo foi atingido
-      const prazoAtingido = isPrazoAtingido(project.tipo, project.tempo_dias)
+      const prazoAtingido =
+        project.tipo && project.tempo_dias ? isPrazoAtingido(project.tipo, project.tempo_dias) : false
 
       // Calcular comissão
-      const { percentual, valor } = calculateCommission(project.valor_consultoria, avaliacao, prazoAtingido)
+      const { percentual, valor } = calculateCommission(project.valor_consultoria || 0, avaliacao, prazoAtingido)
 
-      console.log("Finalizando consultoria:", {
+      const updateData = {
         id,
-        status: "concluido",
+        status: "concluido" as const,
         data_finalizacao: new Date().toISOString().split("T")[0],
         avaliacao_estrelas: avaliacao,
         prazo_atingido: prazoAtingido,
         percentual_comissao: percentual,
         valor_comissao: valor,
-      })
+      }
+
+      console.log("Finalizando consultoria com dados:", updateData)
 
       // Atualizar o projeto
-      const result = await updateConsultingProject({
-        id,
-        status: "concluido",
-        data_finalizacao: new Date().toISOString().split("T")[0],
-        avaliacao_estrelas: avaliacao,
-        prazo_atingido: prazoAtingido,
-        percentual_comissao: percentual,
-        valor_comissao: valor,
-      })
+      const result = await updateConsultingProject(updateData)
 
       if (!result) {
         throw new Error("Erro ao finalizar consultoria")
@@ -188,7 +197,8 @@ export default function ConsultoriasEmAndamentoPage() {
       console.error("Error finalizing project:", error)
       toast({
         title: "Erro",
-        description: "Não foi possível finalizar a consultoria. Tente novamente.",
+        description:
+          error instanceof Error ? error.message : "Não foi possível finalizar a consultoria. Tente novamente.",
         variant: "destructive",
       })
     } finally {
@@ -200,18 +210,25 @@ export default function ConsultoriasEmAndamentoPage() {
     try {
       setIsLoading(true)
 
-      // Buscar o projeto atual
-      const project = projects.find((p) => p.id === id)
+      // Buscar o projeto atual com verificação de segurança
+      const project = projects.find((p) => p && p.id === id)
       if (!project) {
+        console.error("Projeto não encontrado com ID:", id)
         throw new Error("Projeto não encontrado")
       }
 
+      console.log("Projeto encontrado para cancelamento:", project)
+
       // Atualizar o projeto
-      await updateConsultingProject({
+      const result = await updateConsultingProject({
         id,
-        status: "cancelado",
+        status: "cancelado" as const,
         data_finalizacao: new Date().toISOString().split("T")[0],
       })
+
+      if (!result) {
+        throw new Error("Erro ao cancelar consultoria")
+      }
 
       toast({
         title: "Consultoria cancelada",
@@ -219,12 +236,13 @@ export default function ConsultoriasEmAndamentoPage() {
       })
 
       // Recarregar dados
-      fetchData()
+      await fetchData()
     } catch (error) {
       console.error("Error canceling project:", error)
       toast({
         title: "Erro",
-        description: "Não foi possível cancelar a consultoria. Tente novamente.",
+        description:
+          error instanceof Error ? error.message : "Não foi possível cancelar a consultoria. Tente novamente.",
         variant: "destructive",
       })
     } finally {

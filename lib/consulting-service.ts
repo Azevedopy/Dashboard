@@ -1,334 +1,630 @@
-import { getSupabase } from "./supabase"
-import type { ConsultingProject, ConsultingStats, ConsultingMetric } from "./types"
+import { getSupabase } from "@/lib/supabase"
+import type { ConsultingProject, ConsultingStats, ConsultingMetric } from "@/lib/types"
 
-// Function to fetch all consulting projects
-export async function getConsultingProjects(
-  filters: {
-    status?: string
-    consultor?: string
-    startDate?: string
-    endDate?: string
-  } = {},
-): Promise<ConsultingProject[]> {
+// Função para verificar se estamos em ambiente de preview (v0.dev)
+const isPreviewEnvironment = () => {
+  return (
+    typeof window !== "undefined" &&
+    (window.location.hostname.includes("v0.dev") ||
+      window.location.hostname === "localhost" ||
+      !process.env.NEXT_PUBLIC_SUPABASE_URL)
+  )
+}
+
+// Dados mockados para ambiente de preview
+const generateMockProjects = (): ConsultingProject[] => [
+  {
+    id: "mock-1",
+    cliente: "Empresa Alpha Ltda",
+    tipo: "consultoria",
+    porte: "enterprise",
+    consultor: "João Silva",
+    data_inicio: "2024-01-15",
+    data_termino: "2024-03-10",
+    data_finalizacao: "2024-03-12",
+    tempo_dias: 55,
+    valor_consultoria: 25000,
+    valor_comissao: 3000,
+    percentual_comissao: 12,
+    avaliacao_estrelas: 5,
+    prazo_atingido: true,
+    status: "concluido",
+    created_at: "2024-01-15T10:00:00Z",
+    updated_at: "2024-01-15T10:00:00Z",
+  },
+  {
+    id: "mock-2",
+    cliente: "Tech Solutions Inc",
+    tipo: "upsell",
+    porte: "pro",
+    consultor: "Maria Santos",
+    data_inicio: "2024-02-01",
+    data_termino: "2024-03-15",
+    data_finalizacao: "2024-03-20",
+    tempo_dias: 43,
+    valor_consultoria: 18000,
+    valor_comissao: 2160,
+    percentual_comissao: 12,
+    avaliacao_estrelas: 4,
+    prazo_atingido: false,
+    status: "concluido",
+    created_at: "2024-02-01T09:00:00Z",
+    updated_at: "2024-02-01T09:00:00Z",
+  },
+  {
+    id: "mock-3",
+    cliente: "Startup Inovadora",
+    tipo: "consultoria",
+    porte: "starter",
+    consultor: "Carlos Mendes",
+    data_inicio: "2024-03-01",
+    data_termino: "2024-03-20",
+    data_finalizacao: "2024-03-18",
+    tempo_dias: 19,
+    valor_consultoria: 8500,
+    valor_comissao: 1020,
+    percentual_comissao: 12,
+    avaliacao_estrelas: 5,
+    prazo_atingido: true,
+    status: "concluido",
+    created_at: "2024-03-01T08:00:00Z",
+    updated_at: "2024-03-01T08:00:00Z",
+  },
+  {
+    id: "896f72e8-67d8-4953-910f-80d36c4dbbc0",
+    cliente: "Empresa Exemplo Ltda",
+    tipo: "consultoria",
+    porte: "pro",
+    consultor: "João Silva",
+    data_inicio: "2024-01-15",
+    data_termino: "2024-03-10",
+    data_fechamento: "2024-01-10",
+    data_virada: "2024-02-15",
+    tempo_dias: 55,
+    valor_consultoria: 25000,
+    valor_comissao: 3000,
+    percentual_comissao: 12,
+    status: "em_andamento",
+    prazo_atingido: null,
+    avaliacao_estrelas: null,
+    nota_consultoria: null,
+    data_finalizacao: null,
+    created_at: "2024-01-15T10:00:00Z",
+    updated_at: "2024-01-15T10:00:00Z",
+  },
+]
+
+// Buscar projetos de consultoria
+export async function getConsultingProjects(filters?: {
+  status?: string
+  startDate?: string
+  endDate?: string
+  consultor?: string
+}): Promise<ConsultingProject[]> {
+  console.log("🔍 Buscando projetos de consultoria com filtros:", filters)
+
+  // Se estamos em ambiente de preview, retornar dados mockados
+  if (isPreviewEnvironment()) {
+    console.log("📱 Ambiente de preview detectado. Usando dados mockados.")
+
+    // Simular um pequeno atraso para parecer mais realista
+    await new Promise((resolve) => setTimeout(resolve, 500))
+
+    let mockProjects = generateMockProjects()
+
+    // Aplicar filtros básicos aos dados mockados
+    if (filters) {
+      if (filters.status) {
+        mockProjects = mockProjects.filter((p) => p.status === filters.status)
+      }
+
+      if (filters.consultor && filters.consultor !== "todos") {
+        mockProjects = mockProjects.filter((p) => p.consultor === filters.consultor)
+      }
+
+      if (filters.startDate) {
+        mockProjects = mockProjects.filter((p) => p.data_inicio >= filters.startDate!)
+      }
+
+      if (filters.endDate) {
+        mockProjects = mockProjects.filter((p) => p.data_termino <= filters.endDate!)
+      }
+    }
+
+    console.log(`✅ Mock: ${mockProjects.length} projetos encontrados`)
+    return mockProjects
+  }
+
   try {
     const supabase = getSupabase()
 
-    // Verificar se estamos em ambiente de preview
-    if (typeof window !== "undefined" && window.location.hostname.includes("v0.dev")) {
-      console.log("🔄 Retornando dados mockados para ambiente de preview")
-      return getMockConsultingProjects()
+    if (!supabase) {
+      throw new Error("Cliente Supabase não inicializado")
     }
 
-    console.log("Buscando projetos com filtros:", filters) // Log para debug
-
+    // Usar a tabela correta: metrics_consultoria
     let query = supabase.from("metrics_consultoria").select("*")
 
-    if (filters.status) {
-      console.log(`Filtrando por status: ${filters.status}`) // Log para debug
-      query = query.eq("status", filters.status)
+    // Aplicar filtros
+    if (filters) {
+      if (filters.status) {
+        query = query.eq("status", filters.status)
+      }
+      if (filters.startDate) {
+        query = query.gte("data_inicio", filters.startDate)
+      }
+      if (filters.endDate) {
+        query = query.lte("data_termino", filters.endDate)
+      }
+      if (filters.consultor && filters.consultor !== "todos") {
+        query = query.eq("consultor", filters.consultor)
+      }
     }
 
-    if (filters.consultor && filters.consultor !== "todos") {
-      query = query.eq("consultor", filters.consultor)
-    }
-
-    // Aplicar filtros de data apenas se fornecidos
-    if (filters.startDate) {
-      console.log(`Filtrando por data início >= ${filters.startDate}`) // Log para debug
-      query = query.gte("data_inicio", filters.startDate)
-    }
-
-    if (filters.endDate) {
-      console.log(`Filtrando por data término <= ${filters.endDate}`) // Log para debug
-      query = query.lte("data_termino", filters.endDate)
-    }
-
-    // Ordenar por data de criação (mais recentes primeiro)
-    query = query.order("created_at", { ascending: false })
+    // Ordenar por data de início (mais recente primeiro)
+    query = query.order("data_inicio", { ascending: false })
 
     const { data, error } = await query
 
     if (error) {
-      console.error("Error fetching consulting projects:", error)
-      return getMockConsultingProjects()
+      console.error("❌ Erro ao buscar projetos de consultoria:", error)
+      throw error
     }
 
-    console.log(`Encontrados ${data?.length || 0} projetos`) // Log para debug
-    console.log("Primeiros 3 projetos:", data?.slice(0, 3)) // Log para debug
-    return data || []
+    console.log(`✅ Produção: ${data?.length || 0} projetos encontrados`)
+    return (data as ConsultingProject[]) || []
   } catch (error) {
-    console.error("Unexpected error fetching consulting projects:", error)
-    return getMockConsultingProjects()
+    console.error("❌ Erro em getConsultingProjects:", error)
+    // Em caso de erro, retornar dados mockados como fallback
+    console.log("🔄 Usando dados mockados como fallback")
+    return generateMockProjects()
   }
 }
 
-// Function to fetch a consulting project by ID
-export async function getConsultingProjectById(id: string): Promise<ConsultingProject | null> {
+// Buscar estatísticas de consultoria
+export async function getConsultingStats(filters?: {
+  startDate?: string
+  endDate?: string
+}): Promise<ConsultingStats> {
+  console.log("📊 Calculando estatísticas de consultoria")
+
   try {
-    const supabase = getSupabase()
+    const allProjects = await getConsultingProjects(filters)
+    const activeProjects = allProjects.filter((p) => p.status === "em_andamento")
+    const completedProjects = allProjects.filter((p) => p.status === "concluido")
 
-    // Verificar se estamos em ambiente de preview
-    if (typeof window !== "undefined" && window.location.hostname.includes("v0.dev")) {
-      console.log("🔄 Retornando dados mockados para ambiente de preview")
-      const mockProjects = getMockConsultingProjects()
-      return mockProjects.find((p) => p.id === id) || mockProjects[0]
-    }
-
-    console.log(`Buscando projeto com ID: ${id}`) // Log para debug
-
-    const { data, error } = await supabase.from("metrics_consultoria").select("*").eq("id", id).single()
-
-    if (error) {
-      console.error("Error fetching consulting project:", error)
-      return null
-    }
-
-    console.log("Projeto encontrado:", data) // Log para debug
-    return data
-  } catch (error) {
-    console.error("Unexpected error fetching consulting project:", error)
-    return null
-  }
-}
-
-// Function to create a new consulting project
-export async function createConsultingProject(
-  project: Omit<ConsultingProject, "id" | "created_at" | "updated_at">,
-): Promise<ConsultingProject | null> {
-  try {
-    const supabase = getSupabase()
-
-    // Verificar se estamos em ambiente de preview
-    if (typeof window !== "undefined" && window.location.hostname.includes("v0.dev")) {
-      console.log("🔄 Simulando criação de projeto em ambiente de preview")
+    if (!allProjects || allProjects.length === 0) {
+      console.log("📊 Nenhum projeto encontrado, retornando estatísticas vazias")
       return {
-        id: "mock-" + Date.now(),
-        ...project,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+        totalProjects: 0,
+        activeProjects: 0,
+        completedProjects: 0,
+        averageRating: 0,
+        totalRevenue: 0,
+        averageProjectDuration: 0,
+        deadlineComplianceRate: 0,
       }
     }
 
-    // Garantir que o status seja definido como "em_andamento" se não for fornecido
-    const projectData = {
-      ...project,
-      status: project.status || "em_andamento",
-      // Garantir que campos numéricos sejam números
-      valor_consultoria: Number(project.valor_consultoria),
-      valor_bonus: Number(project.valor_bonus),
-      tempo_dias: Number(project.tempo_dias),
-    }
+    // Calcular estatísticas
+    const totalRevenue = allProjects.reduce((sum, project) => sum + (Number(project.valor_consultoria) || 0), 0)
 
-    console.log("Criando projeto com dados:", projectData) // Log para debug
+    const projectsWithRating = completedProjects.filter(
+      (p) => p.avaliacao_estrelas !== null && p.avaliacao_estrelas !== undefined && p.avaliacao_estrelas > 0,
+    )
+    const averageRating =
+      projectsWithRating.length > 0
+        ? projectsWithRating.reduce((sum, p) => sum + (p.avaliacao_estrelas || 0), 0) / projectsWithRating.length
+        : 0
 
-    const { data, error } = await supabase.from("metrics_consultoria").insert([projectData]).select().single()
+    const projectsWithDuration = allProjects.filter((p) => p.tempo_dias && p.tempo_dias > 0)
+    const averageProjectDuration =
+      projectsWithDuration.length > 0
+        ? projectsWithDuration.reduce((sum, p) => sum + (p.tempo_dias || 0), 0) / projectsWithDuration.length
+        : 0
 
-    if (error) {
-      console.error("Error creating consulting project:", error)
-      return null
-    }
+    const projectsWithDeadlineInfo = completedProjects.filter(
+      (p) => p.prazo_atingido !== null && p.prazo_atingido !== undefined,
+    )
+    const deadlineComplianceRate =
+      projectsWithDeadlineInfo.length > 0
+        ? (projectsWithDeadlineInfo.filter((p) => p.prazo_atingido === true).length / projectsWithDeadlineInfo.length) *
+          100
+        : 0
 
-    console.log("Projeto criado com sucesso:", data) // Log para debug
-    return data
-  } catch (error) {
-    console.error("Unexpected error creating consulting project:", error)
-    return null
-  }
-}
-
-// Function to update an existing consulting project
-export async function updateConsultingProject(project: Partial<ConsultingProject>): Promise<ConsultingProject | null> {
-  try {
-    const supabase = getSupabase()
-
-    console.log("Atualizando projeto de consultoria:", project)
-
-    // Verificar se estamos em ambiente de preview
-    if (typeof window !== "undefined" && window.location.hostname.includes("v0.dev")) {
-      console.log("🔄 Simulando atualização de projeto em ambiente de preview")
-      return {
-        ...project,
-        updated_at: new Date().toISOString(),
-      } as ConsultingProject
-    }
-
-    // Garantir que campos numéricos sejam números
-    const projectData = { ...project }
-    if (projectData.valor_consultoria !== undefined) {
-      projectData.valor_consultoria = Number(projectData.valor_consultoria)
-    }
-    if (projectData.valor_bonus !== undefined) {
-      projectData.valor_bonus = Number(projectData.valor_bonus)
-    }
-    if (projectData.tempo_dias !== undefined) {
-      projectData.tempo_dias = Number(projectData.tempo_dias)
-    }
-
-    const { data, error } = await supabase
-      .from("metrics_consultoria")
-      .update(projectData)
-      .eq("id", project.id)
-      .select()
-      .single()
-
-    if (error) {
-      console.error("Error updating consulting project:", error)
-      return null
-    }
-
-    console.log("Projeto atualizado com sucesso:", data)
-    return data
-  } catch (error) {
-    console.error("Unexpected error updating consulting project:", error)
-    return null
-  }
-}
-
-// Function to delete a consulting project
-export async function deleteConsultingProject(id: string): Promise<boolean> {
-  try {
-    const supabase = getSupabase()
-
-    // Verificar se estamos em ambiente de preview
-    if (typeof window !== "undefined" && window.location.hostname.includes("v0.dev")) {
-      console.log("🔄 Simulando exclusão de projeto em ambiente de preview")
-      return true
-    }
-
-    const { error } = await supabase.from("metrics_consultoria").delete().eq("id", id)
-
-    if (error) {
-      console.error("Error deleting consulting project:", error)
-      return false
-    }
-
-    return true
-  } catch (error) {
-    console.error("Unexpected error deleting consulting project:", error)
-    return false
-  }
-}
-
-// Function to calculate consulting stats
-export async function getConsultingStats(
-  filters: {
-    status?: string
-    consultor?: string
-    startDate?: string
-    endDate?: string
-  } = {},
-): Promise<ConsultingStats> {
-  try {
-    // Verificar se estamos em ambiente de preview
-    if (typeof window !== "undefined" && window.location.hostname.includes("v0.dev")) {
-      console.log("🔄 Retornando estatísticas mockadas para ambiente de preview")
-      return getMockConsultingStats()
-    }
-
-    const projects = await getConsultingProjects(filters)
-
-    const totalProjects = projects.length
-    const activeProjects = projects.filter((project) => project.status === "em_andamento").length
-    const completedProjects = projects.filter((project) => project.status === "concluido").length
-
-    let totalRating = 0
-    let validRatingCount = 0
-    projects.forEach((project) => {
-      if (project.avaliacao_estrelas) {
-        // Usar o nome correto do campo
-        totalRating += Number(project.avaliacao_estrelas)
-        validRatingCount++
-      }
-    })
-    const averageRating = validRatingCount > 0 ? totalRating / validRatingCount : 0
-
-    let totalRevenue = 0
-    projects.forEach((project) => {
-      totalRevenue += Number(project.valor_consultoria) || 0 // Usar o nome correto do campo
-    })
-
-    let totalDuration = 0
-    projects.forEach((project) => {
-      totalDuration += Number(project.tempo_dias) || 0 // Usar o nome correto do campo
-    })
-    const averageProjectDuration = totalProjects > 0 ? totalDuration / totalProjects : 0
-
-    let deadlineComplianceCount = 0
-    projects.forEach((project) => {
-      if (project.prazo_atingido) {
-        // Usar o nome correto do campo
-        deadlineComplianceCount++
-      }
-    })
-    const deadlineComplianceRate = totalProjects > 0 ? (deadlineComplianceCount / totalProjects) * 100 : 0
-
-    return {
-      totalProjects,
-      activeProjects,
-      completedProjects,
+    const stats = {
+      totalProjects: allProjects.length,
+      activeProjects: activeProjects.length,
+      completedProjects: completedProjects.length,
       averageRating,
       totalRevenue,
       averageProjectDuration,
       deadlineComplianceRate,
     }
+
+    console.log("📊 Estatísticas calculadas:", stats)
+    return stats
   } catch (error) {
-    console.error("Error calculating consulting stats:", error)
-    return getMockConsultingStats()
+    console.error("❌ Erro em getConsultingStats:", error)
+
+    // Retornar estatísticas mockadas como fallback
+    return {
+      totalProjects: 2,
+      activeProjects: 2,
+      completedProjects: 0,
+      averageRating: 0,
+      totalRevenue: 43000,
+      averageProjectDuration: 49,
+      deadlineComplianceRate: 0,
+    }
   }
 }
 
-// Function to get unique consultant names
+// Buscar lista de consultores
 export async function getConsultores(): Promise<string[]> {
-  try {
-    console.log("🔍 Buscando consultores...")
+  console.log("👥 Buscando consultores")
 
-    // Verificar se estamos em ambiente de preview
-    if (typeof window !== "undefined" && window.location.hostname.includes("v0.dev")) {
-      console.log("🔄 Retornando consultores mockados para ambiente de preview")
-      return ["Ana Silva", "Carlos Oliveira", "Mariana Santos", "Pedro Costa", "Juliana Lima"]
+  try {
+    // Se estamos em ambiente de preview, retornar consultores mockados
+    if (isPreviewEnvironment()) {
+      const mockConsultores = ["João Silva", "Maria Santos", "Carlos Mendes", "Ana Costa"]
+      console.log("📱 Mock: Consultores encontrados:", mockConsultores)
+      return mockConsultores
     }
 
     const supabase = getSupabase()
 
-    // Buscar todos os consultores únicos da tabela metrics_consultoria
+    if (!supabase) {
+      throw new Error("Cliente Supabase não inicializado")
+    }
+
     const { data, error } = await supabase
       .from("metrics_consultoria")
-      .select("consultor") // Usar o nome correto do campo
+      .select("consultor")
       .not("consultor", "is", null)
       .order("consultor")
 
     if (error) {
       console.error("❌ Erro ao buscar consultores:", error)
-      return ["Ana Silva", "Carlos Oliveira", "Mariana Santos", "Pedro Costa", "Juliana Lima"]
+      throw error
     }
 
-    console.log("📊 Dados brutos de consultores:", data)
-
-    // Extrair nomes únicos de consultores
-    const consultores = [...new Set(data.map((item) => item.consultor))]
-      .filter(Boolean) // Remove valores null, undefined ou vazios
-      .sort() // Ordena alfabeticamente
-
-    console.log("✅ Consultores únicos encontrados:", consultores)
+    // Filtrar valores únicos
+    const consultores = [...new Set(data.map((item) => item.consultor).filter(Boolean))] as string[]
+    console.log("✅ Consultores encontrados:", consultores)
     return consultores
   } catch (error) {
-    console.error("❌ Erro inesperado ao buscar consultores:", error)
-    return ["Ana Silva", "Carlos Oliveira", "Mariana Santos", "Pedro Costa", "Juliana Lima"]
+    console.error("❌ Erro em getConsultores:", error)
+
+    // Em caso de erro, retornar consultores mockados
+    const fallbackConsultores = ["João Silva", "Maria Santos", "Carlos Mendes", "Ana Costa"]
+    console.log("🔄 Usando consultores mockados como fallback:", fallbackConsultores)
+    return fallbackConsultores
   }
 }
 
-// Nova função para criar métricas de consultoria
-export async function createConsultingMetric(metric: ConsultingMetric): Promise<{ success: boolean; error?: string }> {
-  try {
-    console.log("Criando métrica de consultoria:", metric)
+// Criar novo projeto de consultoria
+export async function createConsultingProject(projectData: Partial<ConsultingProject>): Promise<ConsultingProject> {
+  console.log("➕ Criando novo projeto de consultoria:", projectData)
 
-    // Verificar se estamos em ambiente de preview
-    if (typeof window !== "undefined" && window.location.hostname.includes("v0.dev")) {
-      console.log("🔄 Simulando criação de métrica em ambiente de preview")
+  // Se estamos em ambiente de preview, simular criação
+  if (isPreviewEnvironment()) {
+    console.log("📱 Simulando criação em ambiente de preview")
+
+    const mockProject: ConsultingProject = {
+      id: `mock-${Date.now()}`,
+      cliente: projectData.cliente || "",
+      tipo: projectData.tipo || "consultoria",
+      porte: projectData.porte || "basic",
+      consultor: projectData.consultor || "",
+      data_inicio: projectData.data_inicio || new Date().toISOString().split("T")[0],
+      data_termino: projectData.data_termino || new Date().toISOString().split("T")[0],
+      tempo_dias: projectData.tempo_dias || 0,
+      valor_consultoria: projectData.valor_consultoria || 0,
+      valor_comissao: projectData.valor_comissao || 0,
+      percentual_comissao: projectData.percentual_comissao || 0,
+      status: projectData.status || "em_andamento",
+      prazo_atingido: projectData.prazo_atingido || null,
+      avaliacao_estrelas: projectData.avaliacao_estrelas || null,
+      nota_consultoria: projectData.nota_consultoria || null,
+      data_finalizacao: projectData.data_finalizacao || null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }
+
+    // Simular delay de criação
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+
+    console.log("✅ Mock: Projeto criado com sucesso:", mockProject)
+    return mockProject
+  }
+
+  try {
+    const supabase = getSupabase()
+
+    if (!supabase) {
+      throw new Error("Cliente Supabase não inicializado")
+    }
+
+    // Preparar dados para inserção
+    const insertData = {
+      cliente: projectData.cliente,
+      tipo: projectData.tipo,
+      porte: projectData.porte,
+      consultor: projectData.consultor,
+      data_inicio: projectData.data_inicio,
+      data_termino: projectData.data_termino,
+      tempo_dias: Number(projectData.tempo_dias) || 0,
+      valor_consultoria: Number(projectData.valor_consultoria) || 0,
+      valor_comissao: Number(projectData.valor_comissao) || 0,
+      percentual_comissao: Number(projectData.percentual_comissao) || 0,
+      status: projectData.status || "em_andamento",
+      prazo_atingido: projectData.prazo_atingido,
+      avaliacao_estrelas: projectData.avaliacao_estrelas ? Number(projectData.avaliacao_estrelas) : null,
+      nota_consultoria: projectData.nota_consultoria || null,
+      data_finalizacao: projectData.data_finalizacao || null,
+    }
+
+    console.log("📝 Dados preparados para inserção:", insertData)
+
+    const { data, error } = await supabase.from("metrics_consultoria").insert([insertData]).select().single()
+
+    if (error) {
+      console.error("❌ Erro ao criar projeto de consultoria:", error)
+      throw error
+    }
+
+    console.log("✅ Projeto de consultoria criado com sucesso:", data)
+    return data as ConsultingProject
+  } catch (error) {
+    console.error("❌ Erro em createConsultingProject:", error)
+    throw error
+  }
+}
+
+// Atualizar projeto de consultoria
+export async function updateConsultingProject(
+  updateData: Partial<ConsultingProject> & { id: string },
+): Promise<ConsultingProject | null> {
+  console.log("✏️ Atualizando projeto de consultoria:", updateData)
+
+  const { id, ...projectData } = updateData
+
+  if (!id) {
+    console.error("❌ ID do projeto é obrigatório para atualização")
+    throw new Error("ID do projeto é obrigatório")
+  }
+
+  // Se estamos em ambiente de preview, simular atualização
+  if (isPreviewEnvironment()) {
+    console.log("📱 Simulando atualização em ambiente de preview")
+
+    const mockProject: ConsultingProject = {
+      id,
+      cliente: projectData.cliente || "Cliente Mock",
+      tipo: projectData.tipo || "consultoria",
+      porte: projectData.porte || "basic",
+      consultor: projectData.consultor || "Consultor Mock",
+      data_inicio: projectData.data_inicio || new Date().toISOString().split("T")[0],
+      data_termino: projectData.data_termino || new Date().toISOString().split("T")[0],
+      tempo_dias: projectData.tempo_dias || 0,
+      valor_consultoria: projectData.valor_consultoria || 0,
+      valor_comissao: projectData.valor_comissao || 0,
+      percentual_comissao: projectData.percentual_comissao || 0,
+      status: projectData.status || "em_andamento",
+      prazo_atingido: projectData.prazo_atingido || null,
+      avaliacao_estrelas: projectData.avaliacao_estrelas || null,
+      nota_consultoria: projectData.nota_consultoria || null,
+      data_finalizacao: projectData.data_finalizacao || null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }
+
+    // Simular delay de atualização
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+
+    console.log("✅ Mock: Projeto atualizado com sucesso:", mockProject)
+    return mockProject
+  }
+
+  try {
+    const supabase = getSupabase()
+
+    if (!supabase) {
+      throw new Error("Cliente Supabase não inicializado")
+    }
+
+    // Preparar dados para atualização - remover campos undefined
+    const cleanUpdateData: any = {}
+
+    Object.keys(projectData).forEach((key) => {
+      const value = projectData[key as keyof typeof projectData]
+      if (value !== undefined) {
+        // Converter campos numéricos
+        if (
+          ["tempo_dias", "valor_consultoria", "valor_comissao", "percentual_comissao", "avaliacao_estrelas"].includes(
+            key,
+          )
+        ) {
+          cleanUpdateData[key] = Number(value) || 0
+        } else {
+          cleanUpdateData[key] = value
+        }
+      }
+    })
+
+    console.log("📝 Dados limpos para atualização:", cleanUpdateData)
+
+    const { data, error } = await supabase
+      .from("metrics_consultoria")
+      .update(cleanUpdateData)
+      .eq("id", id)
+      .select()
+      .single()
+
+    if (error) {
+      console.error("❌ Erro ao atualizar projeto de consultoria:", error)
+      throw error
+    }
+
+    console.log("✅ Projeto de consultoria atualizado com sucesso:", data)
+    return data as ConsultingProject
+  } catch (error) {
+    console.error("❌ Erro em updateConsultingProject:", error)
+    throw error
+  }
+}
+
+// Buscar projeto de consultoria por ID
+export async function getConsultingProjectById(id: string): Promise<ConsultingProject | null> {
+  console.log("🔍 Buscando projeto de consultoria por ID:", id)
+
+  // Se estamos em ambiente de preview, retornar dados mockados
+  if (isPreviewEnvironment()) {
+    console.log("📱 Retornando dados mockados para preview")
+
+    // Buscar nos dados mockados primeiro
+    const mockProjects = generateMockProjects()
+    const foundProject = mockProjects.find((p) => p.id === id)
+
+    if (foundProject) {
+      console.log("✅ Mock: Projeto encontrado nos dados mockados:", foundProject)
+      return foundProject
+    }
+
+    // Se não encontrou, retornar um projeto genérico
+    const mockProject: ConsultingProject = {
+      id,
+      cliente: "Empresa Exemplo Ltda",
+      tipo: "consultoria",
+      porte: "pro",
+      consultor: "João Silva",
+      data_inicio: "2024-01-15",
+      data_termino: "2024-03-10",
+      data_fechamento: "2024-01-10",
+      data_virada: "2024-02-15",
+      tempo_dias: 55,
+      valor_consultoria: 25000,
+      valor_comissao: 3000,
+      percentual_comissao: 12,
+      status: "em_andamento",
+      prazo_atingido: null,
+      avaliacao_estrelas: null,
+      nota_consultoria: null,
+      data_finalizacao: null,
+      created_at: "2024-01-15T10:00:00Z",
+      updated_at: "2024-01-15T10:00:00Z",
+    }
+
+    console.log("✅ Mock: Projeto genérico retornado:", mockProject)
+    return mockProject
+  }
+
+  try {
+    const supabase = getSupabase()
+
+    if (!supabase) {
+      throw new Error("Cliente Supabase não inicializado")
+    }
+
+    const { data, error } = await supabase.from("metrics_consultoria").select("*").eq("id", id).single()
+
+    if (error) {
+      console.error("❌ Erro ao buscar projeto por ID:", error)
+      return null
+    }
+
+    console.log("✅ Projeto encontrado:", data)
+    return data as ConsultingProject
+  } catch (error) {
+    console.error("❌ Erro em getConsultingProjectById:", error)
+    return null
+  }
+}
+
+// Deletar projeto de consultoria - FUNÇÃO ADICIONADA
+export async function deleteConsultingProject(id: string): Promise<{ success: boolean; error?: string }> {
+  console.log("🗑️ Deletando projeto de consultoria:", id)
+
+  if (!id) {
+    console.error("❌ ID do projeto é obrigatório para exclusão")
+    return { success: false, error: "ID do projeto é obrigatório" }
+  }
+
+  // Se estamos em ambiente de preview, simular exclusão
+  if (isPreviewEnvironment()) {
+    console.log("📱 Simulando exclusão em ambiente de preview")
+
+    // Simular delay de exclusão
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+
+    console.log("✅ Mock: Projeto deletado com sucesso")
+    return { success: true }
+  }
+
+  try {
+    const supabase = getSupabase()
+
+    if (!supabase) {
+      throw new Error("Cliente Supabase não inicializado")
+    }
+
+    // Verificar se o projeto existe antes de deletar
+    const { data: existingProject, error: fetchError } = await supabase
+      .from("metrics_consultoria")
+      .select("id")
+      .eq("id", id)
+      .single()
+
+    if (fetchError) {
+      if (fetchError.code === "PGRST116") {
+        console.log("⚠️ Projeto não encontrado para exclusão:", id)
+        return { success: false, error: "Projeto não encontrado" }
+      }
+      console.error("❌ Erro ao verificar projeto para exclusão:", fetchError)
+      return { success: false, error: fetchError.message }
+    }
+
+    // Deletar o projeto
+    const { error: deleteError } = await supabase.from("metrics_consultoria").delete().eq("id", id)
+
+    if (deleteError) {
+      console.error("❌ Erro ao deletar projeto de consultoria:", deleteError)
+      return { success: false, error: deleteError.message }
+    }
+
+    console.log("✅ Projeto de consultoria deletado com sucesso:", id)
+    return { success: true }
+  } catch (error) {
+    console.error("❌ Erro inesperado ao deletar projeto de consultoria:", error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Erro desconhecido ao deletar projeto de consultoria",
+    }
+  }
+}
+
+// Criar métrica de consultoria
+export async function createConsultingMetric(metric: ConsultingMetric): Promise<{ success: boolean; error?: string }> {
+  console.log("📊 Criando métrica de consultoria:", metric)
+
+  try {
+    // Se estamos em ambiente de preview, simular criação
+    if (isPreviewEnvironment()) {
+      console.log("📱 Simulando criação de métrica em ambiente de preview")
+
+      // Simular delay
+      await new Promise((resolve) => setTimeout(resolve, 1000))
+
+      console.log("✅ Mock: Métrica criada com sucesso")
       return { success: true }
     }
 
     const supabase = getSupabase()
+
+    if (!supabase) {
+      throw new Error("Cliente Supabase não inicializado")
+    }
 
     // Mapeando os campos da métrica para o formato esperado pela tabela metrics_consultoria
     const projectData = {
@@ -337,82 +633,41 @@ export async function createConsultingMetric(metric: ConsultingMetric): Promise<
       consultor: metric.consultor,
       data_inicio: metric.start_date,
       data_termino: metric.end_date,
-      tempo_dias: Number(metric.duration),
+      tempo_dias: Number(metric.duration) || 0,
       porte: metric.size,
-      porte_detalhado: metric.size_detail,
-      data_fechamento: metric.closing_date,
-      data_virada: metric.turning_date,
-      valor_consultoria: Number(metric.consulting_value),
-      valor_bonus: Number(metric.bonus_8_percent),
-      valor_bonus_12: Number(metric.bonus_12_percent),
+      porte_detalhado: metric.size_detail || null,
+      data_fechamento: metric.closing_date || null,
+      data_virada: metric.turning_date || null,
+      valor_consultoria: Number(metric.consulting_value) || 0,
+      valor_bonus: Number(metric.bonus_8_percent) || 0,
+      valor_bonus_12: Number(metric.bonus_12_percent) || 0,
       status: metric.status,
       valor_liquido_projeto: metric.valor_liquido_projeto ? Number(metric.valor_liquido_projeto) : null,
+      // Campos de avaliação se fornecidos
+      avaliacao_estrelas: metric.avaliacao_estrelas ? Number(metric.avaliacao_estrelas) : null,
+      nota_consultoria: metric.nota_consultoria || null,
+      data_finalizacao: metric.data_finalizacao || null,
+      prazo_atingido: metric.prazo_atingido !== undefined ? metric.prazo_atingido : null,
+      valor_comissao: metric.valor_comissao ? Number(metric.valor_comissao) : null,
+      percentual_comissao: metric.percentual_comissao ? Number(metric.percentual_comissao) : null,
     }
 
-    const { data, error } = await supabase.from("metrics_consultoria").insert([projectData])
+    console.log("📝 Dados preparados para inserção:", projectData)
+
+    const { data, error } = await supabase.from("metrics_consultoria").insert([projectData]).select().single()
 
     if (error) {
-      console.error("Erro ao criar métrica de consultoria:", error)
+      console.error("❌ Erro ao criar métrica de consultoria:", error)
       return { success: false, error: error.message }
     }
 
+    console.log("✅ Métrica de consultoria criada com sucesso:", data)
     return { success: true }
   } catch (error) {
-    console.error("Erro inesperado ao criar métrica de consultoria:", error)
+    console.error("❌ Erro inesperado ao criar métrica de consultoria:", error)
     return {
       success: false,
       error: error instanceof Error ? error.message : "Erro desconhecido ao criar métrica de consultoria",
     }
-  }
-}
-
-// Função para gerar projetos de consultoria mockados
-function getMockConsultingProjects(): ConsultingProject[] {
-  return [
-    {
-      id: "mock-1",
-      cliente: "Empresa ABC",
-      tipo: "Implementação",
-      consultor: "Ana Silva",
-      data_inicio: "2024-05-01",
-      data_termino: "2024-06-15",
-      tempo_dias: 45,
-      porte: "pro",
-      valor_consultoria: 15000,
-      valor_bonus: 0,
-      status: "em_andamento",
-      created_at: "2024-05-01T10:00:00Z",
-      updated_at: "2024-05-01T10:00:00Z",
-    },
-    {
-      id: "mock-2",
-      cliente: "Startup XYZ",
-      tipo: "Consultoria",
-      consultor: "Carlos Oliveira",
-      data_inicio: "2024-04-15",
-      data_termino: "2024-05-15",
-      tempo_dias: 30,
-      porte: "starter",
-      valor_consultoria: 8000,
-      valor_bonus: 0,
-      status: "concluido",
-      avaliacao_estrelas: 5,
-      prazo_atingido: true,
-      created_at: "2024-04-15T09:30:00Z",
-      updated_at: "2024-05-15T16:45:00Z",
-    },
-  ]
-}
-
-// Função para gerar estatísticas de consultoria mockadas
-function getMockConsultingStats(): ConsultingStats {
-  return {
-    totalProjects: 2,
-    activeProjects: 1,
-    completedProjects: 1,
-    averageRating: 5,
-    totalRevenue: 23000,
-    averageProjectDuration: 37.5,
-    deadlineComplianceRate: 100,
   }
 }

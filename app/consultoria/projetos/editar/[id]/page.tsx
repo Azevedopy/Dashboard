@@ -5,20 +5,23 @@ import { useParams, useRouter } from "next/navigation"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import { z } from "zod"
-import { ArrowLeft, Save } from "lucide-react"
+import { format } from "date-fns"
+import { ptBR } from "date-fns/locale"
+import { ArrowLeft, Save, CalendarIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { DatePicker } from "@/components/ui/date-picker"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Calendar } from "@/components/ui/calendar"
 import { Skeleton } from "@/components/ui/skeleton"
 import { toast } from "@/components/ui/use-toast"
 import { Toaster } from "@/components/ui/toaster"
+import { cn } from "@/lib/utils"
 import { getConsultingProjectById, updateConsultingProject } from "@/lib/consulting-service"
 import { getMembers } from "@/lib/members-service"
-import { formatCurrency } from "@/lib/utils"
 import type { ConsultingProject, Member } from "@/lib/types"
 
 // Schema de validação
@@ -48,13 +51,30 @@ export default function EditProjectPage() {
   const [isLoadingMembers, setIsLoadingMembers] = useState(true)
   const [valorConsultoria, setValorConsultoria] = useState(0)
 
+  // Estados para os erros de validação
+  const [errors, setErrors] = useState<Record<string, string>>({})
+
+  // Definir os portes conforme o padrão
+  const portes = [
+    { value: "basic", label: "Basic" },
+    { value: "starter", label: "Starter" },
+    { value: "pro", label: "Pro" },
+    { value: "enterprise", label: "Enterprise" },
+  ]
+
+  // Definir os tipos conforme os dados existentes no banco
+  const tipos = [
+    { value: "Consultoria", label: "Consultoria" },
+    { value: "Upsell", label: "Upsell" },
+  ]
+
   // Inicializar formulário
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       cliente: "",
       consultor: "",
-      tipo: "Consultoria", // Usando o valor com inicial maiúscula
+      tipo: "Consultoria",
       porte: "",
       data_inicio: new Date(),
       data_termino: new Date(),
@@ -114,11 +134,7 @@ export default function EditProjectPage() {
     try {
       const data = await getConsultingProjectById(id)
       if (data) {
-        // Log para verificar a estrutura exata dos dados
-        console.log("Projeto carregado (estrutura completa):", data)
-        console.log("Chaves do objeto:", Object.keys(data))
-        console.log("Valor do campo tipo:", data.tipo)
-
+        console.log("Projeto carregado:", data)
         setProject(data)
 
         // Definir valores iniciais para o formulário
@@ -161,9 +177,41 @@ export default function EditProjectPage() {
     }
   }
 
+  // Função para validar o formulário
+  const validateForm = () => {
+    const newErrors: Record<string, string> = {}
+
+    const values = form.getValues()
+
+    if (!values.cliente) newErrors.cliente = "Cliente é obrigatório"
+    if (!values.tipo) newErrors.tipo = "Tipo é obrigatório"
+    if (!values.consultor) newErrors.consultor = "Consultor é obrigatório"
+    if (!values.status) newErrors.status = "Status é obrigatório"
+    if (!values.porte) newErrors.porte = "Porte é obrigatório"
+    if (!values.data_inicio) newErrors.data_inicio = "Data de início é obrigatória"
+    if (!values.data_termino) newErrors.data_termino = "Data de término é obrigatória"
+
+    // Validar se a data de término é posterior à data de início
+    if (values.data_inicio && values.data_termino && values.data_inicio > values.data_termino) {
+      newErrors.data_termino = "A data de término deve ser posterior à data de início"
+    }
+
+    setErrors(newErrors)
+    return Object.keys(newErrors).length === 0
+  }
+
   // Enviar formulário
   const onSubmit = async (values: FormValues) => {
     if (!project) return
+
+    if (!validateForm()) {
+      toast({
+        title: "Erro de validação",
+        description: "Por favor, corrija os erros no formulário antes de enviar.",
+        variant: "destructive",
+      })
+      return
+    }
 
     setIsSaving(true)
     try {
@@ -183,12 +231,14 @@ export default function EditProjectPage() {
       await updateConsultingProject(updatedProject)
 
       toast({
-        title: "Projeto atualizado",
-        description: "O projeto foi atualizado com sucesso.",
+        title: "Projeto atualizado com sucesso",
+        description: `O projeto foi atualizado para ${values.consultor}.`,
       })
 
-      // Redirecionar para página de detalhes
-      router.push(`/consultoria/projetos/${project.id}`)
+      // Aguardar um pouco e redirecionar
+      setTimeout(() => {
+        router.push("/dashboard/consultoria/em-andamento")
+      }, 1500)
     } catch (error) {
       console.error("Error updating project:", error)
       toast({
@@ -222,52 +272,68 @@ export default function EditProjectPage() {
     }
   }
 
+  // Obter limite de dias baseado no porte
+  const getPorteLimit = (porteValue: string): number => {
+    const porteLimits = {
+      basic: 15,
+      starter: 25,
+      pro: 40,
+      enterprise: 60,
+    }
+    return porteLimits[porteValue as keyof typeof porteLimits] || 0
+  }
+
+  // Calcular informações do projeto
+  const calculateProjectInfo = () => {
+    const porte = form.getValues("porte")
+    const duration = form.getValues("tempo_dias")
+    const porteLimit = getPorteLimit(porte)
+    const daysUsed = duration
+    const isWithinLimit = daysUsed <= porteLimit && daysUsed > 0
+
+    return {
+      daysUsed,
+      porteLimit,
+      isWithinLimit,
+    }
+  }
+
+  const projectInfo = calculateProjectInfo()
+
   return (
-    <div className="flex flex-col h-full">
-      <div className="p-6 border-b flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => router.back()}>
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
-        <div className="flex-1">
-          <h1 className="text-2xl font-bold">Editar Projeto</h1>
-          <p className="text-sm text-muted-foreground">Atualize as informações do projeto de consultoria</p>
+    <div className="container mx-auto py-6">
+      <div className="p-6 bg-[#0056D6] text-white flex items-center mb-6">
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="icon" onClick={() => router.back()} className="text-white hover:bg-white/20">
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <div>
+            <h1 className="text-2xl font-bold text-white">Editar Projeto</h1>
+            <p className="text-sm text-white/90">Atualize as informações do projeto de consultoria</p>
+          </div>
         </div>
-        <Button
-          type="submit"
-          form="edit-project-form"
-          disabled={isSaving}
-          className="gap-2 bg-blue-600 hover:bg-blue-700"
-        >
-          {isSaving ? (
-            "Salvando..."
-          ) : (
-            <>
-              <Save className="h-4 w-4" />
-              Salvar Alterações
-            </>
-          )}
-        </Button>
       </div>
 
-      <div className="p-6 space-y-6 flex-1 overflow-auto">
-        {isLoading ? (
-          <div className="space-y-6">
-            <Skeleton className="h-12 w-3/4" />
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <Skeleton className="h-32" />
-              <Skeleton className="h-32" />
-            </div>
-            <Skeleton className="h-64" />
+      {isLoading ? (
+        <div className="space-y-6">
+          <Skeleton className="h-12 w-3/4" />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Skeleton className="h-32" />
+            <Skeleton className="h-32" />
           </div>
-        ) : (
-          <Form {...form}>
-            <form id="edit-project-form" onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Informações Básicas</CardTitle>
-                  <CardDescription>Dados principais do projeto</CardDescription>
-                </CardHeader>
-                <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <Skeleton className="h-64" />
+        </div>
+      ) : (
+        <Form {...form}>
+          <form id="edit-project-form" onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+            <Card>
+              <CardContent className="pt-6">
+                <div className="mb-6">
+                  <h2 className="text-xl font-semibold">Informações Básicas</h2>
+                  <p className="text-sm text-muted-foreground">Dados principais do projeto</p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <FormField
                     control={form.control}
                     name="cliente"
@@ -275,9 +341,14 @@ export default function EditProjectPage() {
                       <FormItem>
                         <FormLabel>Cliente</FormLabel>
                         <FormControl>
-                          <Input placeholder="Nome do cliente" {...field} />
+                          <Input
+                            placeholder="Nome do cliente"
+                            {...field}
+                            className={errors.cliente ? "border-red-500" : ""}
+                          />
                         </FormControl>
                         <FormMessage />
+                        {errors.cliente && <p className="text-sm text-red-500">{errors.cliente}</p>}
                       </FormItem>
                     )}
                   />
@@ -290,16 +361,20 @@ export default function EditProjectPage() {
                         <FormLabel>Tipo</FormLabel>
                         <Select onValueChange={field.onChange} defaultValue={field.value}>
                           <FormControl>
-                            <SelectTrigger>
+                            <SelectTrigger className={errors.tipo ? "border-red-500" : ""}>
                               <SelectValue placeholder="Selecione o tipo" />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            <SelectItem value="Consultoria">Consultoria</SelectItem>
-                            <SelectItem value="Upsell">Upsell</SelectItem>
+                            {tipos.map((tipo) => (
+                              <SelectItem key={tipo.value} value={tipo.value}>
+                                {tipo.label}
+                              </SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                         <FormMessage />
+                        {errors.tipo && <p className="text-sm text-red-500">{errors.tipo}</p>}
                       </FormItem>
                     )}
                   />
@@ -309,19 +384,19 @@ export default function EditProjectPage() {
                     name="consultor"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Consultor</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <FormLabel>
+                          Consultor {isLoadingMembers && <span className="text-xs">(Carregando...)</span>}
+                        </FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isLoadingMembers}>
                           <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Selecione o consultor" />
+                            <SelectTrigger className={errors.consultor ? "border-red-500" : ""}>
+                              <SelectValue
+                                placeholder={isLoadingMembers ? "Carregando consultores..." : "Selecione um consultor"}
+                              />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {isLoadingMembers ? (
-                              <SelectItem value="loading" disabled>
-                                Carregando consultores...
-                              </SelectItem>
-                            ) : members.length > 0 ? (
+                            {members.length > 0 ? (
                               members.map((member) => (
                                 <SelectItem key={member.id} value={member.name}>
                                   {member.name}
@@ -335,6 +410,7 @@ export default function EditProjectPage() {
                           </SelectContent>
                         </Select>
                         <FormMessage />
+                        {errors.consultor && <p className="text-sm text-red-500">{errors.consultor}</p>}
                       </FormItem>
                     )}
                   />
@@ -347,7 +423,7 @@ export default function EditProjectPage() {
                         <FormLabel>Status</FormLabel>
                         <Select onValueChange={field.onChange} defaultValue={field.value}>
                           <FormControl>
-                            <SelectTrigger>
+                            <SelectTrigger className={errors.status ? "border-red-500" : ""}>
                               <SelectValue placeholder="Selecione o status" />
                             </SelectTrigger>
                           </FormControl>
@@ -358,6 +434,7 @@ export default function EditProjectPage() {
                           </SelectContent>
                         </Select>
                         <FormMessage />
+                        {errors.status && <p className="text-sm text-red-500">{errors.status}</p>}
                       </FormItem>
                     )}
                   />
@@ -370,78 +447,210 @@ export default function EditProjectPage() {
                         <FormLabel>Porte</FormLabel>
                         <Select onValueChange={field.onChange} defaultValue={field.value}>
                           <FormControl>
-                            <SelectTrigger>
+                            <SelectTrigger className={errors.porte ? "border-red-500" : ""}>
                               <SelectValue placeholder="Selecione o porte" />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            <SelectItem value="Basic">Basic</SelectItem>
-                            <SelectItem value="Starter">Starter</SelectItem>
-                            <SelectItem value="Pro">Pro</SelectItem>
-                            <SelectItem value="Enterprise">Enterprise</SelectItem>
+                            {portes.map((porte) => (
+                              <SelectItem key={porte.value} value={porte.value}>
+                                {porte.label}
+                              </SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
+                        <FormMessage />
+                        {errors.porte && <p className="text-sm text-red-500">{errors.porte}</p>}
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="pt-6">
+                <div className="mb-6">
+                  <h2 className="text-xl font-semibold">Detalhes do Projeto</h2>
+                  <p className="text-sm text-muted-foreground">Informações detalhadas sobre o projeto</p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <FormField
+                    control={form.control}
+                    name="data_inicio"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-col">
+                        <FormLabel>Data de Início</FormLabel>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <FormControl>
+                              <Button
+                                variant={"outline"}
+                                className={cn(
+                                  "w-full pl-3 text-left font-normal",
+                                  !field.value && "text-muted-foreground",
+                                  errors.data_inicio && "border-red-500",
+                                )}
+                              >
+                                {field.value ? (
+                                  format(field.value, "dd/MM/yyyy", { locale: ptBR })
+                                ) : (
+                                  <span>Selecione uma data</span>
+                                )}
+                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                              </Button>
+                            </FormControl>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                              mode="single"
+                              selected={field.value}
+                              onSelect={(date) => handleDateChange(field, date)}
+                              disabled={(date) => date > new Date("2030-01-01") || date < new Date("2020-01-01")}
+                              initialFocus
+                            />
+                          </PopoverContent>
+                        </Popover>
+                        <FormMessage />
+                        {errors.data_inicio && <p className="text-sm text-red-500">{errors.data_inicio}</p>}
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="data_termino"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-col">
+                        <FormLabel>Data de Término</FormLabel>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <FormControl>
+                              <Button
+                                variant={"outline"}
+                                className={cn(
+                                  "w-full pl-3 text-left font-normal",
+                                  !field.value && "text-muted-foreground",
+                                  errors.data_termino && "border-red-500",
+                                )}
+                              >
+                                {field.value ? (
+                                  format(field.value, "dd/MM/yyyy", { locale: ptBR })
+                                ) : (
+                                  <span>Selecione uma data</span>
+                                )}
+                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                              </Button>
+                            </FormControl>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                              mode="single"
+                              selected={field.value}
+                              onSelect={(date) => handleDateChange(field, date)}
+                              disabled={(date) => date > new Date("2030-01-01") || date < new Date("2020-01-01")}
+                              initialFocus
+                            />
+                          </PopoverContent>
+                        </Popover>
+                        <FormMessage />
+                        {errors.data_termino && <p className="text-sm text-red-500">{errors.data_termino}</p>}
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="tempo_dias"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Duração (dias)</FormLabel>
+                        <FormControl>
+                          <Input type="number" {...field} />
+                        </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
-                </CardContent>
-              </Card>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>Detalhes do Projeto</CardTitle>
-                  <CardDescription>Informações detalhadas sobre o projeto</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <FormField
-                      control={form.control}
-                      name="data_inicio"
-                      render={({ field }) => (
-                        <FormItem className="flex flex-col">
-                          <FormLabel>Data de Início</FormLabel>
-                          <DatePicker date={field.value} setDate={(date) => handleDateChange(field, date)} />
-                          <FormMessage />
-                        </FormItem>
+                  <div className="md:col-span-2 space-y-4">
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                      <h3 className="text-sm font-medium text-blue-900 mb-3">Informações do Projeto</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                        <div>
+                          <span className="text-blue-700 font-medium">Dias utilizados:</span>
+                          <p
+                            className={`text-lg font-bold ${
+                              projectInfo.isWithinLimit ? "text-green-600" : "text-red-600"
+                            }`}
+                          >
+                            {projectInfo.daysUsed} dias
+                          </p>
+                        </div>
+                        <div>
+                          <span className="text-blue-700 font-medium">Limite do porte:</span>
+                          <p className="text-lg font-bold text-blue-600">{projectInfo.porteLimit} dias</p>
+                        </div>
+                        <div>
+                          <span className="text-blue-700 font-medium">Status:</span>
+                          <p className="text-lg font-bold">
+                            {projectInfo.daysUsed > 0 ? (
+                              projectInfo.isWithinLimit ? (
+                                <span className="text-green-600">Dentro do prazo</span>
+                              ) : (
+                                <span className="text-red-600">Excedido</span>
+                              )
+                            ) : (
+                              <span className="text-gray-500">Não calculado</span>
+                            )}
+                          </p>
+                        </div>
+                      </div>
+                      {projectInfo.daysUsed > 0 && !projectInfo.isWithinLimit && (
+                        <div className="mt-3 text-xs text-red-600">
+                          ⚠️ Excedeu o prazo permitido em {projectInfo.daysUsed - projectInfo.porteLimit} dias
+                        </div>
                       )}
-                    />
-
-                    <FormField
-                      control={form.control}
-                      name="data_termino"
-                      render={({ field }) => (
-                        <FormItem className="flex flex-col">
-                          <FormLabel>Data de Término</FormLabel>
-                          <DatePicker date={field.value} setDate={(date) => handleDateChange(field, date)} />
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <FormField
-                      control={form.control}
-                      name="tempo_dias"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Duração (dias)</FormLabel>
-                          <FormControl>
-                            <Input type="number" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+                    </div>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
                     <FormField
                       control={form.control}
                       name="data_fechamento"
                       render={({ field }) => (
                         <FormItem className="flex flex-col">
                           <FormLabel>Data de Fechamento</FormLabel>
-                          <DatePicker date={field.value} setDate={(date) => field.onChange(date)} />
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <FormControl>
+                                <Button
+                                  variant={"outline"}
+                                  className={cn(
+                                    "w-full pl-3 text-left font-normal",
+                                    !field.value && "text-muted-foreground",
+                                  )}
+                                >
+                                  {field.value ? (
+                                    format(field.value, "dd/MM/yyyy", { locale: ptBR })
+                                  ) : (
+                                    <span>Selecione uma data</span>
+                                  )}
+                                  <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                                </Button>
+                              </FormControl>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0" align="start">
+                              <Calendar
+                                mode="single"
+                                selected={field.value || undefined}
+                                onSelect={(date) => field.onChange(date)}
+                                disabled={(date) => date > new Date("2030-01-01") || date < new Date("2020-01-01")}
+                                initialFocus
+                              />
+                            </PopoverContent>
+                          </Popover>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -453,21 +662,52 @@ export default function EditProjectPage() {
                       render={({ field }) => (
                         <FormItem className="flex flex-col">
                           <FormLabel>Data de Virada</FormLabel>
-                          <DatePicker date={field.value} setDate={(date) => field.onChange(date)} />
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <FormControl>
+                                <Button
+                                  variant={"outline"}
+                                  className={cn(
+                                    "w-full pl-3 text-left font-normal",
+                                    !field.value && "text-muted-foreground",
+                                  )}
+                                >
+                                  {field.value ? (
+                                    format(field.value, "dd/MM/yyyy", { locale: ptBR })
+                                  ) : (
+                                    <span>Selecione uma data</span>
+                                  )}
+                                  <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                                </Button>
+                              </FormControl>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0" align="start">
+                              <Calendar
+                                mode="single"
+                                selected={field.value || undefined}
+                                onSelect={(date) => field.onChange(date)}
+                                disabled={(date) => date > new Date("2030-01-01") || date < new Date("2020-01-01")}
+                                initialFocus
+                              />
+                            </PopoverContent>
+                          </Popover>
                           <FormMessage />
                         </FormItem>
                       )}
                     />
                   </div>
-                </CardContent>
-              </Card>
+                </div>
+              </CardContent>
+            </Card>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>Informações Financeiras</CardTitle>
-                  <CardDescription>Dados financeiros do projeto</CardDescription>
-                </CardHeader>
-                <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <Card>
+              <CardContent className="pt-6">
+                <div className="mb-6">
+                  <h2 className="text-xl font-semibold">Informações Financeiras</h2>
+                  <p className="text-sm text-muted-foreground">Dados financeiros do projeto</p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                   <FormField
                     control={form.control}
                     name="valor_consultoria"
@@ -493,7 +733,7 @@ export default function EditProjectPage() {
                   <div className="space-y-2">
                     <div className="text-sm font-medium">Bônus (8%)</div>
                     <div className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background">
-                      {formatCurrency(Number.parseFloat(bonus8Percent))}
+                      R$ {bonus8Percent}
                     </div>
                     <p className="text-xs text-muted-foreground">Valor calculado como 8% do valor da consultoria</p>
                   </div>
@@ -501,16 +741,23 @@ export default function EditProjectPage() {
                   <div className="space-y-2">
                     <div className="text-sm font-medium">Bônus (12%)</div>
                     <div className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background">
-                      {formatCurrency(Number.parseFloat(bonus12Percent))}
+                      R$ {bonus12Percent}
                     </div>
                     <p className="text-xs text-muted-foreground">Valor calculado como 12% do valor da consultoria</p>
                   </div>
-                </CardContent>
-              </Card>
-            </form>
-          </Form>
-        )}
-      </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <div className="flex justify-end pt-6">
+              <Button type="submit" disabled={isSaving} className="bg-[#0056D6] text-white hover:bg-[#0056D6]/90">
+                <Save className="mr-2 h-4 w-4" />
+                {isSaving ? "Salvando..." : "Salvar Alterações"}
+              </Button>
+            </div>
+          </form>
+        </Form>
+      )}
       <Toaster />
     </div>
   )

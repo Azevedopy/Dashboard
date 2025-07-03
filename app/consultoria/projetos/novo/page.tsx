@@ -1,400 +1,447 @@
 "use client"
 
-import { useState } from "react"
+import type React from "react"
+
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { zodResolver } from "@hookform/resolvers/zod"
-import { useForm } from "react-hook-form"
+import { format, differenceInDays, parseISO } from "date-fns"
+import { ArrowLeft, Save, Star } from "lucide-react"
 import { z } from "zod"
-import { ArrowLeft, Save } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
+import { DatePicker } from "@/components/ui/date-picker"
 import { toast } from "@/components/ui/use-toast"
-import { Toaster } from "@/components/ui/toaster"
-import { createConsultingProject } from "@/lib/consulting-service"
+import { createConsultingProject, getConsultores } from "@/lib/consulting-service"
+import { formatCurrency } from "@/lib/utils"
+import { calculateCommission, isPrazoAtingido } from "@/lib/commission-utils"
 
-// Schema para validação do formulário
-const projectSchema = z.object({
-  cliente: z.string().min(1, { message: "Cliente é obrigatório" }),
-  tipo: z.string().min(1, { message: "Tipo é obrigatório" }),
-  tipo_projeto: z.string().min(1, { message: "Tipo de projeto é obrigatório" }),
-  data_inicio: z.string().min(1, { message: "Data de início é obrigatória" }),
-  data_termino: z.string().min(1, { message: "Data de término é obrigatória" }),
-  tempo_dias: z.coerce.number().min(1, { message: "Tempo em dias deve ser maior que zero" }),
-  porte: z.string().min(1, { message: "Porte é obrigatório" }),
-  porte_detalhado: z.string().optional(),
-  valor_consultoria: z.coerce.number().min(0, { message: "Valor deve ser maior ou igual a zero" }),
-  valor_bonus: z.coerce.number().min(0, { message: "Valor de bônus deve ser maior ou igual a zero" }),
-  consultor: z.string().optional(),
-  status: z.string().default("em_andamento"),
-  avaliacao: z.string().optional(),
+// Schema de validação
+const consultingSchema = z.object({
+  cliente: z.string().min(1, "Cliente é obrigatório"),
+  tipo: z.enum(["consultoria", "upsell"], {
+    required_error: "Tipo é obrigatório",
+  }),
+  porte: z.enum(["starter", "basic", "pro", "enterprise"], {
+    required_error: "Porte é obrigatório",
+  }),
+  consultor: z.string().min(1, "Consultor é obrigatório"),
+  data_inicio: z.string().min(1, "Data de início é obrigatória"),
+  data_termino: z.string().min(1, "Data de término é obrigatória"),
+  valor_consultoria: z.number().min(0, "Valor deve ser positivo"),
+  status: z.enum(["em_andamento", "concluido", "cancelado"]),
+  avaliacao_estrelas: z.number().min(1).max(5).optional(),
+  nota_consultoria: z.string().optional(),
 })
 
-type ProjectFormValues = z.infer<typeof projectSchema>
+type ConsultingFormData = z.infer<typeof consultingSchema>
 
-export default function NewConsultingProjectPage() {
+export default function NovaConsultoriaPage() {
   const router = useRouter()
-  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+  const [consultores, setConsultores] = useState<string[]>([])
+  const [avaliacao, setAvaliacao] = useState<number>(5)
 
-  const form = useForm<ProjectFormValues>({
-    resolver: zodResolver(projectSchema),
-    defaultValues: {
-      cliente: "",
-      tipo: "consultoria",
-      tipo_projeto: "",
-      data_inicio: new Date().toISOString().split("T")[0],
-      data_termino: "",
-      tempo_dias: 30,
-      porte: "",
-      porte_detalhado: "",
-      valor_consultoria: 0,
-      valor_bonus: 0,
-      consultor: "",
-      status: "em_andamento",
-      avaliacao: "",
-    },
+  const [formData, setFormData] = useState<ConsultingFormData>({
+    cliente: "",
+    tipo: "consultoria",
+    porte: "basic",
+    consultor: "",
+    data_inicio: "",
+    data_termino: "",
+    valor_consultoria: 0,
+    status: "em_andamento",
   })
 
-  const onSubmit = async (data: ProjectFormValues) => {
-    setIsSubmitting(true)
+  // Buscar consultores ao carregar a página
+  useEffect(() => {
+    const fetchConsultores = async () => {
+      try {
+        const consultoresList = await getConsultores()
+        setConsultores(consultoresList)
+      } catch (error) {
+        console.error("Erro ao buscar consultores:", error)
+      }
+    }
+
+    fetchConsultores()
+  }, [])
+
+  // Calcular duração automaticamente
+  const calcularDuracao = () => {
+    if (formData.data_inicio && formData.data_termino) {
+      try {
+        const inicio = parseISO(formData.data_inicio)
+        const termino = parseISO(formData.data_termino)
+        return differenceInDays(termino, inicio) + 1
+      } catch (error) {
+        return 0
+      }
+    }
+    return 0
+  }
+
+  const duracao = calcularDuracao()
+
+  // Obter informações do porte
+  const getPorteInfo = (porte: string) => {
+    const portes = {
+      starter: { limite: 15, nome: "Starter" },
+      basic: { limite: 30, nome: "Basic" },
+      pro: { limite: 45, nome: "Pro" },
+      enterprise: { limite: 60, nome: "Enterprise" },
+    }
+    return portes[porte as keyof typeof portes] || { limite: 30, nome: "Basic" }
+  }
+
+  const porteInfo = getPorteInfo(formData.porte)
+  const prazoAtingido = isPrazoAtingido(formData.tipo, duracao)
+
+  // Calcular bônus automaticamente
+  const calcularBonus = (valor: number) => {
+    return {
+      bonus8: valor * 0.08,
+      bonus12: valor * 0.12,
+    }
+  }
+
+  const { bonus8, bonus12 } = calcularBonus(formData.valor_consultoria)
+
+  // Calcular comissão se for projeto concluído
+  const calcularComissaoCompleta = () => {
+    if (formData.status === "concluido") {
+      return calculateCommission(formData.valor_consultoria, avaliacao, prazoAtingido)
+    }
+    return { percentual: 0, valor: 0 }
+  }
+
+  const { percentual: percentualComissao, valor: valorComissao } = calcularComissaoCompleta()
+
+  const handleInputChange = (field: keyof ConsultingFormData, value: any) => {
+    setFormData((prev) => ({
+      ...prev,
+      [field]: value,
+    }))
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsLoading(true)
+
     try {
-      console.log("Enviando projeto com dados:", data) // Log para debug
-      const result = await createConsultingProject(data)
+      // Validar dados
+      const validatedData = consultingSchema.parse({
+        ...formData,
+        valor_consultoria: Number(formData.valor_consultoria),
+        avaliacao_estrelas: formData.status === "concluido" ? avaliacao : undefined,
+      })
+
+      // Preparar dados para criação
+      const projectData = {
+        ...validatedData,
+        tempo_dias: duracao,
+        valor_bonus: bonus8,
+        valor_bonus_12: bonus12,
+        prazo_atingido: formData.status === "concluido" ? prazoAtingido : null,
+        data_finalizacao: formData.status === "concluido" ? new Date().toISOString().split("T")[0] : null,
+        valor_comissao: formData.status === "concluido" ? valorComissao : 0,
+        percentual_comissao: formData.status === "concluido" ? percentualComissao : 0,
+      }
+
+      console.log("Criando projeto com dados:", projectData)
+
+      // Criar projeto
+      const result = await createConsultingProject(projectData)
+
       if (result) {
         toast({
-          title: "Projeto criado",
-          description: `O projeto para ${data.cliente} foi criado com sucesso.`,
+          title: "Consultoria criada",
+          description: `A consultoria para ${formData.cliente} foi criada com sucesso.`,
         })
 
-        // Forçar um pequeno delay antes do redirecionamento para garantir que o toast seja exibido
-        setTimeout(() => {
-          // Redirecionar para a página de detalhes do projeto recém-criado
-          router.push(`/consultoria/projetos/${result.id}`)
-          // Forçar um refresh da página para garantir que os dados sejam carregados
-          router.refresh()
-        }, 1000)
+        // Redirecionar baseado no status
+        if (formData.status === "concluido") {
+          setTimeout(() => {
+            router.push("/dashboard/consultoria/concluidas")
+          }, 1500)
+        } else {
+          setTimeout(() => {
+            router.push("/dashboard/consultoria/em-andamento")
+          }, 1500)
+        }
       } else {
-        throw new Error("Falha ao criar projeto")
+        throw new Error("Falha ao criar consultoria")
       }
     } catch (error) {
-      console.error("Error creating project:", error)
+      console.error("Erro ao criar consultoria:", error)
       toast({
-        title: "Erro ao criar projeto",
-        description: "Não foi possível criar o projeto. Tente novamente mais tarde.",
+        title: "Erro",
+        description: error instanceof Error ? error.message : "Não foi possível criar a consultoria.",
         variant: "destructive",
       })
     } finally {
-      setIsSubmitting(false)
+      setIsLoading(false)
     }
   }
-
-  // Calcular tempo em dias quando as datas mudam
-  const calculateDays = () => {
-    const startDate = form.getValues("data_inicio")
-    const endDate = form.getValues("data_termino")
-
-    if (startDate && endDate) {
-      const start = new Date(startDate)
-      const end = new Date(endDate)
-      const diffTime = Math.abs(end.getTime() - start.getTime())
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-      form.setValue("tempo_dias", diffDays)
-    }
-  }
-
-  const tipoProjeto = [
-    "Implantação",
-    "Migração",
-    "Consultoria Técnica",
-    "Treinamento",
-    "Desenvolvimento",
-    "Suporte Avançado",
-  ]
-
-  const porteOptions = ["Basic", "Starter", "Pro", "Enterprise"]
-
-  const statusOptions = [
-    { value: "em_andamento", label: "Em Andamento" },
-    { value: "concluido", label: "Concluído" },
-    { value: "cancelado", label: "Cancelado" },
-  ]
 
   return (
     <div className="flex flex-col h-full">
-      <div className="p-6 bg-[#0056D6] text-white flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => router.back()} className="text-white hover:bg-white/20">
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
-        <div>
-          <h1 className="text-2xl font-bold text-white">Novo Projeto de Consultoria</h1>
-          <p className="text-sm text-white/90">Cadastre um novo projeto de consultoria</p>
+      {/* Header */}
+      <div className="p-6 bg-[#0056D6] text-white">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="sm" onClick={() => router.back()} className="text-white hover:bg-white/20">
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Voltar
+          </Button>
+          <div>
+            <h1 className="text-2xl font-bold">Nova Consultoria</h1>
+            <p className="text-sm text-white/90">Cadastre uma nova consultoria no sistema</p>
+          </div>
         </div>
       </div>
 
-      <div className="p-6 overflow-auto">
-        <Card className="max-w-4xl mx-auto">
-          <CardHeader>
-            <CardTitle>Dados do Projeto</CardTitle>
-            <CardDescription>Preencha os dados do novo projeto de consultoria</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <FormField
-                    control={form.control}
-                    name="cliente"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Cliente</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Nome do cliente" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="tipo"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Tipo</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Selecione um tipo" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="consultoria">Consultoria</SelectItem>
-                            <SelectItem value="upsell">Upsell</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="tipo_projeto"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Tipo de Projeto</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Selecione um tipo de projeto" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {tipoProjeto.map((option) => (
-                              <SelectItem key={option} value={option}>
-                                {option}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="data_inicio"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Data de Início</FormLabel>
-                        <FormControl>
-                          <Input
-                            type="date"
-                            {...field}
-                            onChange={(e) => {
-                              field.onChange(e)
-                              calculateDays()
-                            }}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="data_termino"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Data de Término</FormLabel>
-                        <FormControl>
-                          <Input
-                            type="date"
-                            {...field}
-                            onChange={(e) => {
-                              field.onChange(e)
-                              calculateDays()
-                            }}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="tempo_dias"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Tempo em Dias</FormLabel>
-                        <FormControl>
-                          <Input type="number" min="1" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="porte"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Porte</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Selecione um porte" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {porteOptions.map((option) => (
-                              <SelectItem key={option} value={option.toLowerCase()}>
-                                {option}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="porte_detalhado"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Porte Detalhado (opcional)</FormLabel>
-                        <FormControl>
-                          <Input {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="consultor"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Consultor</FormLabel>
-                        <FormControl>
-                          <Input {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="status"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Status</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Selecione um status" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {statusOptions.map((option) => (
-                              <SelectItem key={option.value} value={option.value}>
-                                {option.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="valor_consultoria"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Valor da Consultoria (R$)</FormLabel>
-                        <FormControl>
-                          <Input type="number" min="0" step="0.01" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="valor_bonus"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Valor de Bônus (R$)</FormLabel>
-                        <FormControl>
-                          <Input type="number" min="0" step="0.01" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-
-                <FormField
-                  control={form.control}
-                  name="avaliacao"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Avaliação (opcional)</FormLabel>
-                      <FormControl>
-                        <Textarea {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
+      {/* Formulário */}
+      <div className="p-6 space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Informações Básicas */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Informações Básicas</CardTitle>
+              <CardDescription>Dados principais da consultoria</CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="cliente">Cliente *</Label>
+                <Input
+                  id="cliente"
+                  value={formData.cliente}
+                  onChange={(e) => handleInputChange("cliente", e.target.value)}
+                  placeholder="Nome do cliente"
+                  required
                 />
+              </div>
 
-                <div className="flex justify-end">
-                  <Button type="submit" disabled={isSubmitting} className="gap-2">
-                    <Save className="h-4 w-4" />
-                    {isSubmitting ? "Salvando..." : "Salvar Projeto"}
-                  </Button>
+              <div className="space-y-2">
+                <Label htmlFor="tipo">Tipo *</Label>
+                <Select value={formData.tipo} onValueChange={(value) => handleInputChange("tipo", value)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o tipo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="consultoria">Consultoria</SelectItem>
+                    <SelectItem value="upsell">Upsell</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="consultor">Consultor *</Label>
+                <Select value={formData.consultor} onValueChange={(value) => handleInputChange("consultor", value)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o consultor" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {consultores.map((consultor) => (
+                      <SelectItem key={consultor} value={consultor}>
+                        {consultor}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="status">Status *</Label>
+                <Select value={formData.status} onValueChange={(value) => handleInputChange("status", value)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="em_andamento">Em Andamento</SelectItem>
+                    <SelectItem value="concluido">Concluído</SelectItem>
+                    <SelectItem value="cancelado">Cancelado</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="porte">Porte *</Label>
+                <Select value={formData.porte} onValueChange={(value) => handleInputChange("porte", value)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o porte" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="starter">Starter (até 15 dias)</SelectItem>
+                    <SelectItem value="basic">Basic (até 30 dias)</SelectItem>
+                    <SelectItem value="pro">Pro (até 45 dias)</SelectItem>
+                    <SelectItem value="enterprise">Enterprise (até 60 dias)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Detalhes do Projeto */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Detalhes do Projeto</CardTitle>
+              <CardDescription>Datas e informações do projeto</CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="data_inicio">Data de Início *</Label>
+                <DatePicker
+                  date={formData.data_inicio ? new Date(formData.data_inicio) : undefined}
+                  onSelect={(date) => handleInputChange("data_inicio", date ? format(date, "yyyy-MM-dd") : "")}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="data_termino">Data de Término *</Label>
+                <DatePicker
+                  date={formData.data_termino ? new Date(formData.data_termino) : undefined}
+                  onSelect={(date) => handleInputChange("data_termino", date ? format(date, "yyyy-MM-dd") : "")}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Duração Calculada</Label>
+                <div className="p-3 bg-gray-50 rounded-md">
+                  <div className="text-lg font-semibold">{duracao} dias</div>
+                  <div className="text-sm text-gray-600">
+                    Limite do {porteInfo.nome}: {porteInfo.limite} dias
+                  </div>
+                  <div className={`text-sm ${prazoAtingido ? "text-green-600" : "text-red-600"}`}>
+                    {prazoAtingido ? "✓ Dentro do prazo" : "⚠ Fora do prazo"}
+                  </div>
                 </div>
-              </form>
-            </Form>
-          </CardContent>
-        </Card>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Informações Financeiras */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Informações Financeiras</CardTitle>
+              <CardDescription>Valores e cálculos automáticos</CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="valor_consultoria">Valor da Consultoria (R$) *</Label>
+                <Input
+                  id="valor_consultoria"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={formData.valor_consultoria}
+                  onChange={(e) => handleInputChange("valor_consultoria", Number.parseFloat(e.target.value) || 0)}
+                  placeholder="0,00"
+                  required
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Bônus Calculados</Label>
+                <div className="p-3 bg-gray-50 rounded-md space-y-1">
+                  <div className="text-sm">
+                    <span className="font-medium">Bônus 8%:</span> {formatCurrency(bonus8)}
+                  </div>
+                  <div className="text-sm">
+                    <span className="font-medium">Bônus 12%:</span> {formatCurrency(bonus12)}
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Campo de Avaliação - Aparece apenas se status for "concluido" */}
+          {formData.status === "concluido" && (
+            <Card className="bg-green-50 border-green-200">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-green-800">
+                  <Star className="h-5 w-5" />
+                  Avaliação da Consultoria
+                </CardTitle>
+                <CardDescription className="text-green-700">
+                  Avalie a qualidade da consultoria realizada
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Avaliação por Estrelas</Label>
+                  <div className="flex items-center gap-1">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <button
+                        key={star}
+                        type="button"
+                        onClick={() => setAvaliacao(star)}
+                        className="focus:outline-none"
+                      >
+                        <Star
+                          className={`h-8 w-8 ${
+                            star <= avaliacao ? "text-yellow-400 fill-yellow-400" : "text-gray-300"
+                          }`}
+                        />
+                      </button>
+                    ))}
+                  </div>
+                  <div className="text-sm text-gray-600">
+                    Avaliação: {avaliacao} {avaliacao === 1 ? "estrela" : "estrelas"}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="nota_consultoria">Comentários da Avaliação</Label>
+                  <Textarea
+                    id="nota_consultoria"
+                    value={formData.nota_consultoria || ""}
+                    onChange={(e) => handleInputChange("nota_consultoria", e.target.value)}
+                    placeholder="Descreva os pontos positivos, áreas de melhoria e feedback geral sobre a consultoria..."
+                    rows={3}
+                  />
+                </div>
+
+                <div className="p-3 bg-white rounded-md border">
+                  <h4 className="font-medium text-green-800 mb-2">Cálculo da Comissão</h4>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <span className="text-gray-600">Valor da consultoria:</span>
+                      <div className="font-medium">{formatCurrency(formData.valor_consultoria)}</div>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Percentual de comissão:</span>
+                      <div className="font-medium">{percentualComissao}%</div>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Valor da comissão:</span>
+                      <div className="font-medium text-green-600">{formatCurrency(valorComissao)}</div>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Prazo atingido:</span>
+                      <div className="font-medium">{prazoAtingido ? "Sim" : "Não"}</div>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Botões */}
+          <div className="flex justify-end gap-4">
+            <Button type="button" variant="outline" onClick={() => router.back()}>
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={isLoading}>
+              <Save className="h-4 w-4 mr-2" />
+              {isLoading ? "Salvando..." : "Salvar Consultoria"}
+            </Button>
+          </div>
+        </form>
       </div>
-      <Toaster />
     </div>
   )
 }

@@ -6,7 +6,7 @@ import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
-import { CalendarIcon, ArrowLeft, Save } from "lucide-react"
+import { CalendarIcon, ArrowLeft, Save, Star } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
+import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 import { toast } from "@/components/ui/use-toast"
 import { createConsultingMetric, getConsultores } from "@/lib/consulting-service"
@@ -38,6 +39,12 @@ export default function ConsultingMetricsForm() {
   const [consultingValue, setConsultingValue] = useState(0)
   const [bonus8Percent, setBonus8Percent] = useState(0)
   const [bonus12Percent, setBonus12Percent] = useState(0)
+
+  // Estados para avaliação (quando status for concluído)
+  const [avaliacaoEstrelas, setAvaliacaoEstrelas] = useState(0)
+  const [notaConsultoria, setNotaConsultoria] = useState("")
+  const [valorComissao, setValorComissao] = useState(0)
+  const [percentualComissao, setPercentualComissao] = useState(0)
 
   // Estado para erros de validação
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -126,7 +133,7 @@ export default function ConsultingMetricsForm() {
           toast({
             title: "Aviso",
             description: "Usando lista padrão de consultores. Verifique se há membros cadastrados no sistema.",
-            variant: "warning",
+            variant: "default",
           })
         }
 
@@ -203,6 +210,32 @@ export default function ConsultingMetricsForm() {
 
   const projectInfo = calculateProjectInfo()
 
+  // Função para calcular comissão baseada na avaliação
+  const calculateCommission = (stars: number, prazoAtingido: boolean) => {
+    let percentual = 0
+
+    if (stars >= 4) {
+      percentual = prazoAtingido ? 12 : 8
+    } else if (stars === 3) {
+      percentual = prazoAtingido ? 8 : 5
+    } else if (stars >= 1) {
+      percentual = prazoAtingido ? 5 : 3
+    }
+
+    const valor = (consultingValue * percentual) / 100
+    return { percentual, valor }
+  }
+
+  // UseEffect para calcular comissão quando avaliação ou valor da consultoria mudar
+  useEffect(() => {
+    if (status === "concluido" && avaliacaoEstrelas > 0) {
+      const prazoAtingido = projectInfo.isWithinLimit
+      const { percentual, valor } = calculateCommission(avaliacaoEstrelas, prazoAtingido)
+      setPercentualComissao(percentual)
+      setValorComissao(valor)
+    }
+  }, [avaliacaoEstrelas, consultingValue, status, projectInfo.isWithinLimit])
+
   // Função para validar o formulário
   const validateForm = () => {
     const newErrors: Record<string, string> = {}
@@ -214,7 +247,6 @@ export default function ConsultingMetricsForm() {
     if (!size) newErrors.size = "Porte é obrigatório"
     if (!startDate) newErrors.startDate = "Data de início é obrigatória"
     if (!endDate) newErrors.endDate = "Data de término é obrigatória"
-    // Remover a linha: `if (netProjectValue <= 0) newErrors.netProjectValue = "Valor líquido deve ser maior que zero"`
 
     // Validar se a data de término é posterior à data de início
     if (startDate && endDate && startDate > endDate) {
@@ -231,6 +263,11 @@ export default function ConsultingMetricsForm() {
     const validTipos = ["Consultoria", "Upsell"]
     if (projectType && !validTipos.includes(projectType)) {
       newErrors.projectType = `Tipo deve ser um dos valores: ${validTipos.join(", ")}`
+    }
+
+    // Validar avaliação se status for concluído
+    if (status === "concluido" && avaliacaoEstrelas === 0) {
+      newErrors.avaliacaoEstrelas = "Avaliação é obrigatória para consultorias concluídas"
     }
 
     setErrors(newErrors)
@@ -303,6 +340,13 @@ export default function ConsultingMetricsForm() {
         bonus_8_percent: bonus8Percent,
         bonus_12_percent: bonus12Percent,
         valor_liquido_projeto: netProjectValue,
+        // Campos de avaliação se status for concluído
+        avaliacao_estrelas: status === "concluido" ? avaliacaoEstrelas : undefined,
+        nota_consultoria: status === "concluido" ? notaConsultoria : undefined,
+        valor_comissao: status === "concluido" ? valorComissao : undefined,
+        percentual_comissao: status === "concluido" ? percentualComissao : undefined,
+        data_finalizacao: status === "concluido" ? new Date().toISOString().split("T")[0] : undefined,
+        prazo_atingido: status === "concluido" ? projectInfo.isWithinLimit : undefined,
       })
 
       if (result.success) {
@@ -311,8 +355,12 @@ export default function ConsultingMetricsForm() {
           description: `O projeto de consultoria foi cadastrado para ${consultorName}.`,
         })
 
-        // Redirect to dashboard
-        router.push("/dashboard/consultoria/graficos")
+        // Redirect baseado no status
+        if (status === "concluido") {
+          router.push("/dashboard/consultoria/concluidas")
+        } else {
+          router.push("/dashboard/consultoria/em-andamento")
+        }
       } else {
         throw new Error(result.error || "Erro ao cadastrar projeto")
       }
@@ -344,6 +392,34 @@ Valor enviado para tipo: "${projectType}"`
     } finally {
       setIsLoading(false)
     }
+  }
+
+  // Função para renderizar as estrelas
+  const renderStars = () => {
+    return (
+      <div className="flex items-center gap-1">
+        {[1, 2, 3, 4, 5].map((star) => (
+          <button
+            key={star}
+            type="button"
+            onClick={() => setAvaliacaoEstrelas(star)}
+            className={cn(
+              "p-1 rounded transition-colors",
+              star <= avaliacaoEstrelas
+                ? "text-yellow-500 hover:text-yellow-600"
+                : "text-gray-300 hover:text-yellow-400",
+            )}
+          >
+            <Star className="h-6 w-6 fill-current" />
+          </button>
+        ))}
+        <span className="ml-2 text-sm text-muted-foreground">
+          {avaliacaoEstrelas > 0
+            ? `${avaliacaoEstrelas} estrela${avaliacaoEstrelas > 1 ? "s" : ""}`
+            : "Clique para avaliar"}
+        </span>
+      </div>
+    )
   }
 
   return (
@@ -394,7 +470,6 @@ Valor enviado para tipo: "${projectType}"`
                   </SelectContent>
                 </Select>
                 {errors.projectType && <p className="text-sm text-red-500">{errors.projectType}</p>}
-                <div className="text-xs text-muted-foreground"></div>
               </div>
 
               <div className="space-y-2">
@@ -606,6 +681,63 @@ Valor enviado para tipo: "${projectType}"`
             </div>
           </CardContent>
         </Card>
+
+        {/* Card de Avaliação - Aparece apenas quando status for "concluido" */}
+        {status === "concluido" && (
+          <Card className="border-green-200 bg-green-50">
+            <CardContent className="pt-6">
+              <div className="mb-6">
+                <h2 className="text-xl font-semibold text-green-800 flex items-center gap-2">
+                  <Star className="h-5 w-5" />
+                  Avaliação da Consultoria
+                </h2>
+                <p className="text-sm text-green-700">Avalie a qualidade do trabalho realizado</p>
+              </div>
+
+              <div className="space-y-6">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-green-800">Avaliação por Estrelas</label>
+                  {renderStars()}
+                  {errors.avaliacaoEstrelas && <p className="text-sm text-red-500">{errors.avaliacaoEstrelas}</p>}
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-green-800">Comentários da Avaliação</label>
+                  <Textarea
+                    value={notaConsultoria}
+                    onChange={(e) => setNotaConsultoria(e.target.value)}
+                    placeholder="Descreva os pontos positivos, áreas de melhoria e feedback geral sobre a consultoria..."
+                    className="min-h-[100px]"
+                  />
+                </div>
+
+                {avaliacaoEstrelas > 0 && (
+                  <div className="bg-white border border-green-200 rounded-lg p-4">
+                    <h3 className="text-sm font-medium text-green-800 mb-3">Comissão Calculada</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                      <div>
+                        <span className="text-green-700 font-medium">Avaliação:</span>
+                        <p className="text-lg font-bold text-green-600">{avaliacaoEstrelas} estrelas</p>
+                      </div>
+                      <div>
+                        <span className="text-green-700 font-medium">Percentual:</span>
+                        <p className="text-lg font-bold text-green-600">{percentualComissao}%</p>
+                      </div>
+                      <div>
+                        <span className="text-green-700 font-medium">Valor da Comissão:</span>
+                        <p className="text-lg font-bold text-green-600">R$ {valorComissao.toFixed(2)}</p>
+                      </div>
+                    </div>
+                    <div className="mt-3 text-xs text-green-600">
+                      💡 Comissão calculada baseada na avaliação e cumprimento do prazo
+                    </div>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         <div className="flex justify-end pt-6">
           <Button type="submit" disabled={isLoading} className="bg-[#0056D6] text-white hover:bg-[#0056D6]/90">
             <Save className="mr-2 h-4 w-4" />
