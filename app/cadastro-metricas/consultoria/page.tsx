@@ -35,10 +35,12 @@ export default function ConsultingMetricsForm() {
   const [startDate, setStartDate] = useState<Date | undefined>(undefined)
   const [endDate, setEndDate] = useState<Date | undefined>(undefined)
   const [duration, setDuration] = useState(0)
-  const [netProjectValue, setNetProjectValue] = useState(0)
   const [consultingValue, setConsultingValue] = useState(0)
   const [bonus8Percent, setBonus8Percent] = useState(0)
   const [bonus12Percent, setBonus12Percent] = useState(0)
+
+  // Estado para consultoria bonificada
+  const [isBonificada, setIsBonificada] = useState(false)
 
   // Estados para avaliação (quando status for concluído)
   const [avaliacaoEstrelas, setAvaliacaoEstrelas] = useState(0)
@@ -169,9 +171,17 @@ export default function ConsultingMetricsForm() {
 
   // Usar useEffect para calcular os bônus automaticamente
   useEffect(() => {
-    setBonus8Percent(consultingValue * 0.08)
-    setBonus12Percent(consultingValue * 0.12)
-  }, [consultingValue])
+    if (isBonificada) {
+      // Se for bonificada, valor fixo de 50 e sem bônus
+      setConsultingValue(50)
+      setBonus8Percent(0)
+      setBonus12Percent(0)
+    } else {
+      // Cálculo normal dos bônus
+      setBonus8Percent(consultingValue * 0.08)
+      setBonus12Percent(consultingValue * 0.12)
+    }
+  }, [consultingValue, isBonificada])
 
   // UseEffect para obter o limite de dias baseado no porte
   const getPorteLimit = (porteValue: string): number => {
@@ -326,7 +336,6 @@ export default function ConsultingMetricsForm() {
 
       const result = await createConsultingMetric({
         date: new Date().toISOString().split("T")[0], // Data atual
-        member_id: "", // Removido o member_id, pois não existe na tabela
         consultor: consultorName,
         client: client,
         project_type: projectType,
@@ -339,7 +348,7 @@ export default function ConsultingMetricsForm() {
         consulting_value: consultingValue,
         bonus_8_percent: bonus8Percent,
         bonus_12_percent: bonus12Percent,
-        valor_liquido_projeto: netProjectValue,
+        is_bonificada: isBonificada,
         // Campos de avaliação se status for concluído
         avaliacao_estrelas: status === "concluido" ? avaliacaoEstrelas : undefined,
         nota_consultoria: status === "concluido" ? notaConsultoria : undefined,
@@ -437,6 +446,7 @@ Valor enviado para tipo: "${projectType}"`
       </div>
 
       <form id="consulting-form" onSubmit={handleSubmit} className="space-y-6">
+        {/* 1. Informações Básicas */}
         <Card>
           <CardContent className="pt-6">
             <div className="mb-6">
@@ -509,6 +519,26 @@ Valor enviado para tipo: "${projectType}"`
               </div>
 
               <div className="space-y-2">
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    id="bonificada"
+                    checked={isBonificada}
+                    onChange={(e) => setIsBonificada(e.target.checked)}
+                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  />
+                  <label htmlFor="bonificada" className="text-sm font-medium">
+                    Consultorias bonificadas?
+                  </label>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {isBonificada
+                    ? "Valor fixo de R$ 50,00 sem cálculo de bônus"
+                    : "Valor personalizado com cálculo de bônus"}
+                </p>
+              </div>
+
+              <div className="space-y-2">
                 <label className="text-sm font-medium">Porte</label>
                 <Select onValueChange={setSize}>
                   <SelectTrigger className={errors.size ? "border-red-500" : ""}>
@@ -528,6 +558,63 @@ Valor enviado para tipo: "${projectType}"`
           </CardContent>
         </Card>
 
+        {/* 2. Campo de Avaliação - Aparece apenas quando status for "concluido" */}
+        {status === "concluido" && (
+          <Card className="border-green-200 bg-green-50">
+            <CardContent className="pt-6">
+              <div className="mb-6">
+                <h2 className="text-xl font-semibold text-green-800 flex items-center gap-2">
+                  <Star className="h-5 w-5" />
+                  Avaliação da Consultoria
+                </h2>
+                <p className="text-sm text-green-700">Avalie a qualidade do trabalho realizado</p>
+              </div>
+
+              <div className="space-y-6">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-green-800">Avaliação por Estrelas</label>
+                  {renderStars()}
+                  {errors.avaliacaoEstrelas && <p className="text-sm text-red-500">{errors.avaliacaoEstrelas}</p>}
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-green-800">Comentários da Avaliação</label>
+                  <Textarea
+                    value={notaConsultoria}
+                    onChange={(e) => setNotaConsultoria(e.target.value)}
+                    placeholder="Descreva os pontos positivos, áreas de melhoria e feedback geral sobre a consultoria..."
+                    className="min-h-[100px]"
+                  />
+                </div>
+
+                {avaliacaoEstrelas > 0 && (
+                  <div className="bg-white border border-green-200 rounded-lg p-4">
+                    <h3 className="text-sm font-medium text-green-800 mb-3">Comissão Calculada</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                      <div>
+                        <span className="text-green-700 font-medium">Avaliação:</span>
+                        <p className="text-lg font-bold text-green-600">{avaliacaoEstrelas} estrelas</p>
+                      </div>
+                      <div>
+                        <span className="text-green-700 font-medium">Percentual:</span>
+                        <p className="text-lg font-bold text-green-600">{percentualComissao}%</p>
+                      </div>
+                      <div>
+                        <span className="text-green-700 font-medium">Valor da Comissão:</span>
+                        <p className="text-lg font-bold text-green-600">R$ {valorComissao.toFixed(2)}</p>
+                      </div>
+                    </div>
+                    <div className="mt-3 text-xs text-green-600">
+                      💡 Comissão calculada baseada na avaliação e cumprimento do prazo
+                    </div>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* 3. Detalhes do Projeto */}
         <Card>
           <CardContent className="pt-6">
             <div className="mb-6">
@@ -636,6 +723,7 @@ Valor enviado para tipo: "${projectType}"`
           </CardContent>
         </Card>
 
+        {/* 4. Informações Financeiras */}
         <Card>
           <CardContent className="pt-6">
             <div className="mb-6">
@@ -643,7 +731,7 @@ Valor enviado para tipo: "${projectType}"`
               <p className="text-sm text-muted-foreground">Dados financeiros do projeto</p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="space-y-2">
                 <label className="text-sm font-medium">Valor da Consultoria (R$)</label>
                 <Input
@@ -652,7 +740,10 @@ Valor enviado para tipo: "${projectType}"`
                   step="0.01"
                   value={consultingValue}
                   onChange={(e) => setConsultingValue(Number.parseFloat(e.target.value) || 0)}
+                  disabled={isBonificada}
+                  className={isBonificada ? "bg-gray-100" : ""}
                 />
+                {isBonificada && <p className="text-xs text-blue-600">💡 Valor fixo para consultorias bonificadas</p>}
               </div>
 
               <div className="space-y-2">
@@ -666,77 +757,9 @@ Valor enviado para tipo: "${projectType}"`
                 <Input type="text" value={`R$ ${bonus12Percent.toFixed(2)}`} disabled />
                 <p className="text-xs text-muted-foreground">Valor calculado como 12% do valor da consultoria</p>
               </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Valor Líquido do Projeto (R$)</label>
-                <Input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={netProjectValue}
-                  onChange={(e) => setNetProjectValue(Number.parseFloat(e.target.value) || 0)}
-                  className={errors.netProjectValue ? "border-red-500" : ""}
-                />
-                {errors.netProjectValue && <p className="text-sm text-red-500">{errors.netProjectValue}</p>}
-              </div>
             </div>
           </CardContent>
         </Card>
-
-        {/* Card de Avaliação - Aparece apenas quando status for "concluido" */}
-        {status === "concluido" && (
-          <Card className="border-green-200 bg-green-50">
-            <CardContent className="pt-6">
-              <div className="mb-6">
-                <h2 className="text-xl font-semibold text-green-800 flex items-center gap-2">
-                  <Star className="h-5 w-5" />
-                  Avaliação da Consultoria
-                </h2>
-                <p className="text-sm text-green-700">Avalie a qualidade do trabalho realizado</p>
-              </div>
-
-              <div className="space-y-6">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-green-800">Avaliação por Estrelas</label>
-                  {renderStars()}
-                  {errors.avaliacaoEstrelas && <p className="text-sm text-red-500">{errors.avaliacaoEstrelas}</p>}
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-green-800">Comentários da Avaliação</label>
-                  <Textarea
-                    value={notaConsultoria}
-                    onChange={(e) => setNotaConsultoria(e.target.value)}
-                    placeholder="Descreva os pontos positivos, áreas de melhoria e feedback geral sobre a consultoria..."
-                    className="min-h-[100px]"
-                  />
-                </div>
-
-                {avaliacaoEstrelas > 0 && (
-                  <div className="bg-white border border-green-200 rounded-lg p-4">
-                    <h3 className="text-sm font-medium text-green-800 mb-3">Comissão Calculada</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-                      <div>
-                        <span className="text-green-700 font-medium">Avaliação:</span>
-                        <p className="text-lg font-bold text-green-600">{avaliacaoEstrelas} estrelas</p>
-                      </div>
-                      <div>
-                        <span className="text-green-700 font-medium">Percentual:</span>
-                        <p className="text-lg font-bold text-green-600">{percentualComissao}%</p>
-                      </div>
-                      <div>
-                        <span className="text-green-700 font-medium">Valor da Comissão:</span>
-                        <p className="text-lg font-bold text-green-600">R$ {valorComissao.toFixed(2)}</p>
-                      </div>
-                    </div>
-                    <div className="mt-3 text-xs text-green-600">
-                      💡 Comissão calculada baseada na avaliação e cumprimento do prazo
-                    </div>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        )}
 
         <div className="flex justify-end pt-6">
           <Button type="submit" disabled={isLoading} className="bg-[#0056D6] text-white hover:bg-[#0056D6]/90">

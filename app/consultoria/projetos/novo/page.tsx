@@ -207,7 +207,7 @@ export default function NovaConsultoriaPage() {
       {/* Formulário */}
       <div className="p-6 space-y-6">
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Informações Básicas */}
+          {/* 1. Informações Básicas */}
           <Card>
             <CardHeader>
               <CardTitle>Informações Básicas</CardTitle>
@@ -285,80 +285,7 @@ export default function NovaConsultoriaPage() {
             </CardContent>
           </Card>
 
-          {/* Detalhes do Projeto */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Detalhes do Projeto</CardTitle>
-              <CardDescription>Datas e informações do projeto</CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="data_inicio">Data de Início *</Label>
-                <DatePicker
-                  date={formData.data_inicio ? new Date(formData.data_inicio) : undefined}
-                  onSelect={(date) => handleInputChange("data_inicio", date ? format(date, "yyyy-MM-dd") : "")}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="data_termino">Data de Término *</Label>
-                <DatePicker
-                  date={formData.data_termino ? new Date(formData.data_termino) : undefined}
-                  onSelect={(date) => handleInputChange("data_termino", date ? format(date, "yyyy-MM-dd") : "")}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label>Duração Calculada</Label>
-                <div className="p-3 bg-gray-50 rounded-md">
-                  <div className="text-lg font-semibold">{duracao} dias</div>
-                  <div className="text-sm text-gray-600">
-                    Limite do {porteInfo.nome}: {porteInfo.limite} dias
-                  </div>
-                  <div className={`text-sm ${prazoAtingido ? "text-green-600" : "text-red-600"}`}>
-                    {prazoAtingido ? "✓ Dentro do prazo" : "⚠ Fora do prazo"}
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Informações Financeiras */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Informações Financeiras</CardTitle>
-              <CardDescription>Valores e cálculos automáticos</CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="valor_consultoria">Valor da Consultoria (R$) *</Label>
-                <Input
-                  id="valor_consultoria"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={formData.valor_consultoria}
-                  onChange={(e) => handleInputChange("valor_consultoria", Number.parseFloat(e.target.value) || 0)}
-                  placeholder="0,00"
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label>Bônus Calculados</Label>
-                <div className="p-3 bg-gray-50 rounded-md space-y-1">
-                  <div className="text-sm">
-                    <span className="font-medium">Bônus 8%:</span> {formatCurrency(bonus8)}
-                  </div>
-                  <div className="text-sm">
-                    <span className="font-medium">Bônus 12%:</span> {formatCurrency(bonus12)}
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Campo de Avaliação - Aparece apenas se status for "concluido" */}
+          {/* 2. Campo de Avaliação - Aparece apenas se status for "concluido" */}
           {formData.status === "concluido" && (
             <Card className="bg-green-50 border-green-200">
               <CardHeader>
@@ -429,6 +356,79 @@ export default function NovaConsultoriaPage() {
               </CardContent>
             </Card>
           )}
+
+          {/* 3. Detalhes do Projeto */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Detalhes do Projeto</CardTitle>
+              <CardDescription>Datas e informações do projeto</CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="data_inicio">Data de Início *</Label>
+                <DatePicker
+                  date={formData.data_inicio ? new Date(formData.data_inicio) : undefined}
+                  onSelect={(date) => handleInputChange("data_inicio", date ? format(date, "yyyy-MM-dd") : "")}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="data_termino">Data de Término *</Label>
+                <DatePicker
+                  date={formData.data_termino ? new Date(formData.data_termino) : undefined}
+                  onSelect={(date) => handleInputChange("data_termino", date ? format(date, "yyyy-MM-dd") : "")}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Duração Calculada</Label>
+                <div className="p-3 bg-gray-50 rounded-md">
+                  <div className="text-lg font-semibold">{duracao} dias</div>
+                  <div className="text-sm text-gray-600">
+                    Limite do {porteInfo.nome}: {porteInfo.limite} dias
+                  </div>
+                  <div className={`text-sm ${prazoAtingido ? "text-green-600" : "text-red-600"}`}>
+                    {prazoAtingido ? "✓ Dentro do prazo" : "⚠ Fora do prazo"}
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* 4. Informações Financeiras */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Informações Financeiras</CardTitle>
+              <CardDescription>Valores e cálculos automáticos</CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="valor_consultoria">Valor da Consultoria (R$) *</Label>
+                <Input
+                  id="valor_consultoria"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={formData.valor_consultoria}
+                  onChange={(e) => handleInputChange("valor_consultoria", Number.parseFloat(e.target.value) || 0)}
+                  placeholder="0,00"
+                  required
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Bônus Calculados</Label>
+                <div className="p-3 bg-gray-50 rounded-md space-y-1">
+                  <div className="text-sm">
+                    <span className="font-medium">Bônus 8%:</span> {formatCurrency(bonus8)}
+                  </div>
+                  <div className="text-sm">
+                    <span className="font-medium">Bônus 12%:</span> {formatCurrency(bonus12)}
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
           {/* Botões */}
           <div className="flex justify-end gap-4">

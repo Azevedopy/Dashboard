@@ -16,7 +16,7 @@ import { CompletedConsultingStats } from "@/components/consulting/completed-cons
 import { CompletedConsultingTable } from "@/components/consulting/completed-consulting-table"
 import { ConsultantCommissionChart } from "@/components/consulting/consultant-commission-chart"
 import { cn } from "@/lib/utils"
-import { exportToExcel } from "@/lib/export-utils"
+import { exportCompletedConsultingReport } from "@/lib/export-utils"
 import { toast } from "@/components/ui/use-toast"
 import {
   getCompletedConsultingProjects,
@@ -125,40 +125,23 @@ export default function ConsultoriasConcluidasPage() {
         return
       }
 
-      const dataToExport = projects.map((project) => ({
-        Cliente: project.cliente || "N/A",
-        Tipo: project.tipo || "N/A",
-        Porte: project.porte || "N/A",
-        Consultor: project.consultor || "Não atribuído",
-        "Data de Início": project.data_inicio || "N/A",
-        "Data de Término": project.data_termino || "N/A",
-        "Data de Finalização": project.data_finalizacao || "N/A",
-        "Duração (dias)": project.tempo_dias || 0,
-        "Valor da Consultoria": project.valor_consultoria || 0,
-        "Valor da Comissão": project.valor_comissao || 0,
-        "Percentual de Comissão": project.percentual_comissao || 0,
-        "Avaliação (Estrelas)": project.avaliacao_estrelas || "N/A",
-        "Prazo Atingido": project.prazo_atingido ? "Sim" : "Não",
-        Status: "Concluído",
-      }))
-
       if (isPreview) {
         toast({
           title: "🚀 Modo Demonstração",
           description: "A exportação não está disponível no modo preview.",
         })
       } else {
-        exportToExcel(dataToExport, "consultorias_concluidas")
+        exportCompletedConsultingReport(projects, stats)
         toast({
-          title: "✅ Exportação concluída",
-          description: "Arquivo baixado com sucesso",
+          title: "✅ Relatório exportado",
+          description: "Relatório completo de consultorias concluídas baixado com sucesso",
         })
       }
     } catch (error) {
       console.error("❌ Erro ao exportar:", error)
       toast({
         title: "❌ Erro na exportação",
-        description: "Não foi possível exportar os dados",
+        description: "Não foi possível exportar o relatório",
         variant: "destructive",
       })
     }
@@ -223,7 +206,7 @@ export default function ConsultoriasConcluidasPage() {
           </Popover>
           <Button variant="outline" onClick={handleExport}>
             <Download className="mr-2 h-4 w-4" />
-            Exportar
+            Exportar Relatório
           </Button>
           <Button variant="outline" size="icon" onClick={handleRefresh} disabled={isLoading}>
             <RefreshCw className={cn("h-4 w-4", isLoading && "animate-spin")} />

@@ -12,7 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Badge } from "@/components/ui/badge"
 import { toast } from "@/components/ui/use-toast"
 import { Toaster } from "@/components/ui/toaster"
-import { getConsultingProjectById } from "@/lib/consulting-service"
+import { getConsultingProject } from "@/lib/consulting-service"
 import type { ConsultingProject } from "@/lib/types"
 
 export default function ProjectDetailsPage() {
@@ -31,7 +31,7 @@ export default function ProjectDetailsPage() {
     setIsLoading(true)
     try {
       console.log(`Buscando projeto com ID: ${id}`) // Log para debug
-      const data = await getConsultingProjectById(id)
+      const data = await getConsultingProject(id)
       if (data) {
         console.log("Projeto encontrado:", data) // Log para debug
         setProject(data)

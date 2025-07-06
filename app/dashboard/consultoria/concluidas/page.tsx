@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
-import { CalendarIcon, Download, Filter, RefreshCw } from "lucide-react"
+import { CalendarIcon, Download, Filter, RefreshCw, FileText } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -13,10 +13,10 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { CompletedConsultingTable } from "@/components/consulting/completed-consulting-table"
 import { CompletedConsultingStats } from "@/components/consulting/completed-consulting-stats"
 import { getConsultingProjects, getConsultores } from "@/lib/consulting-service"
-import { exportToExcel } from "@/lib/export-utils"
+import { exportToExcel, exportCompletedConsultingReportToPDF } from "@/lib/export-utils"
 import { toast } from "@/components/ui/use-toast"
 import { Toaster } from "@/components/ui/toaster"
-import type { ConsultingProject } from "@/lib/types"
+import type { ConsultingProject, ConsultingStats } from "@/lib/types"
 
 export default function ConsultoriasConcluidas() {
   const [projects, setProjects] = useState<ConsultingProject[]>([])
@@ -122,16 +122,72 @@ export default function ConsultoriasConcluidas() {
         "Prazo Atingido": project.prazo_atingido ? "SIM" : "NÃO",
       }))
 
-      exportToExcel(dataToExport, "consultorias_concluidas")
-      toast({
-        title: "Sucesso",
-        description: "Dados exportados com sucesso",
-      })
+      const result = exportToExcel(dataToExport, "consultorias_concluidas")
+      if (result.success) {
+        toast({
+          title: "Sucesso",
+          description: result.message,
+        })
+      } else {
+        toast({
+          title: "Erro",
+          description: result.message,
+          variant: "destructive",
+        })
+      }
     } catch (error) {
       console.error("Error exporting data:", error)
       toast({
         title: "Erro",
         description: "Não foi possível exportar os dados",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const handleExportPDF = async () => {
+    try {
+      if (!projects.length) {
+        toast({
+          title: "Aviso",
+          description: "Não há dados para exportar",
+        })
+        return
+      }
+
+      // Calculate stats for the PDF report
+      const completedProjects = projects.filter((p) => p.status === "concluido")
+      const projectsWithRating = completedProjects.filter((p) => p.avaliacao_estrelas && p.avaliacao_estrelas > 0)
+      const projectsWithDuration = completedProjects.filter((p) => p.tempo_dias && p.tempo_dias > 0)
+      const onTimeProjects = completedProjects.filter((p) => p.prazo_atingido === true)
+
+      const stats: ConsultingStats = {
+        totalProjects: completedProjects.length,
+        completedProjects: completedProjects.length,
+        activeProjects: 0,
+        totalRevenue: completedProjects.reduce((sum, p) => sum + (p.valor_consultoria || 0), 0),
+        averageProjectDuration:
+          projectsWithDuration.length > 0
+            ? projectsWithDuration.reduce((sum, p) => sum + (p.tempo_dias || 0), 0) / projectsWithDuration.length
+            : 0,
+        averageRating:
+          projectsWithRating.length > 0
+            ? projectsWithRating.reduce((sum, p) => sum + (p.avaliacao_estrelas || 0), 0) / projectsWithRating.length
+            : 0,
+        onTimeDeliveryRate: completedProjects.length > 0 ? (onTimeProjects.length / completedProjects.length) * 100 : 0,
+      }
+
+      exportCompletedConsultingReportToPDF(completedProjects, stats)
+
+      toast({
+        title: "Sucesso",
+        description: "Relatório PDF gerado com sucesso!",
+      })
+    } catch (error) {
+      console.error("Error exporting PDF:", error)
+      toast({
+        title: "Erro",
+        description: "Não foi possível gerar o relatório PDF",
         variant: "destructive",
       })
     }
@@ -231,7 +287,11 @@ export default function ConsultoriasConcluidas() {
                 </Button>
                 <Button variant="outline" onClick={handleExport} disabled={!projects.length}>
                   <Download className="mr-2 h-4 w-4" />
-                  Exportar
+                  Excel
+                </Button>
+                <Button variant="outline" onClick={handleExportPDF} disabled={!projects.length}>
+                  <FileText className="mr-2 h-4 w-4" />
+                  PDF
                 </Button>
                 <Button variant="outline" size="icon" onClick={fetchData}>
                   <RefreshCw className="h-4 w-4" />

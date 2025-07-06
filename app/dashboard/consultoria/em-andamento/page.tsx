@@ -44,12 +44,10 @@ export default function ConsultoriasEmAndamentoPage() {
       const consultoresList = await getConsultores()
       setConsultores(consultoresList)
 
-      // Aplicar filtros
-      const filterParams: any = {
-        status: "em_andamento", // Apenas projetos em andamento
-      }
+      // Aplicar filtros - buscar projetos em andamento E pausados
+      const filterParams: any = {}
 
-      console.log("Buscando projetos em andamento com filtros:", filterParams)
+      console.log("Buscando projetos em andamento e pausados com filtros:", filterParams)
 
       if (filters.consultor !== "todos") {
         filterParams.consultor = filters.consultor
@@ -64,15 +62,20 @@ export default function ConsultoriasEmAndamentoPage() {
         filterParams.endDate = format(filters.dateRange.to, "yyyy-MM-dd")
       }
 
-      // Buscar projetos
-      const projectsData = await getConsultingProjects(filterParams)
-      console.log(`Projetos em andamento encontrados: ${projectsData.length}`)
-      console.log("Dados dos projetos:", projectsData)
+      // Buscar todos os projetos e filtrar por status localmente
+      const allProjects = await getConsultingProjects(filterParams)
+
+      // Filtrar para mostrar apenas projetos em andamento ou pausados
+      let filteredProjects = allProjects.filter(
+        (project) => project.status === "em_andamento" || project.status === "pausado",
+      )
+
+      console.log(`Projetos em andamento/pausados encontrados: ${filteredProjects.length}`)
+      console.log("Dados dos projetos:", filteredProjects)
 
       // Filtrar por tipo se necessário
-      let filteredProjects = projectsData
       if (filters.tipo !== "todos") {
-        filteredProjects = projectsData.filter(
+        filteredProjects = filteredProjects.filter(
           (project) => project.tipo && project.tipo.toLowerCase() === filters.tipo.toLowerCase(),
         )
         console.log(`Após filtro de tipo: ${filteredProjects.length} projetos`)
@@ -106,22 +109,28 @@ export default function ConsultoriasEmAndamentoPage() {
         return
       }
 
-      const dataToExport = projects.map((project) => ({
-        Cliente: project.cliente || "N/A",
-        Tipo: project.tipo || "N/A",
-        Porte: project.porte || "N/A",
-        Consultor: project.consultor || "Não atribuído",
-        "Data de Início": project.data_inicio ? format(new Date(project.data_inicio), "dd/MM/yyyy") : "N/A",
-        "Data de Término Prevista": project.data_termino ? format(new Date(project.data_termino), "dd/MM/yyyy") : "N/A",
-        "Duração (dias)": project.tempo_dias || 0,
-        "Valor da Consultoria": project.valor_consultoria || 0,
-        "Prazo Atingido":
-          project.tipo && project.tempo_dias
-            ? isPrazoAtingido(project.tipo, project.tempo_dias)
-              ? "SIM"
-              : "NÃO"
+      const dataToExport = projects.map((project) => {
+        const diasEfetivos = Math.max(0, (project.tempo_dias || 0) - (project.dias_pausados || 0))
+        const isPaused = project.data_pausa !== null && project.data_pausa !== undefined
+
+        return {
+          Cliente: project.cliente || "N/A",
+          Tipo: project.tipo || "N/A",
+          Porte: project.porte || "N/A",
+          Consultor: project.consultor || "Não atribuído",
+          "Data de Início": project.data_inicio ? format(new Date(project.data_inicio), "dd/MM/yyyy") : "N/A",
+          "Data de Término Prevista": project.data_termino
+            ? format(new Date(project.data_termino), "dd/MM/yyyy")
             : "N/A",
-      }))
+          "Dias Totais": project.tempo_dias || 0,
+          "Dias Pausados": project.dias_pausados || 0,
+          "Dias Efetivos": diasEfetivos,
+          "Valor da Consultoria": project.valor_consultoria || 0,
+          Status: isPaused ? "Pausado" : "Em Andamento",
+          "Prazo Atingido":
+            project.tipo && diasEfetivos ? (isPrazoAtingido(project.tipo, diasEfetivos) ? "SIM" : "NÃO") : "N/A",
+        }
+      })
 
       exportToExcel(dataToExport, "consultorias_em_andamento")
       toast({
@@ -138,7 +147,7 @@ export default function ConsultoriasEmAndamentoPage() {
     }
   }
 
-  const handleFinalize = async (id: string, avaliacao: number) => {
+  const handleFinalize = async (id: string, avaliacao: number, assinaturaFechamento: boolean) => {
     try {
       setIsLoading(true)
 
@@ -155,21 +164,26 @@ export default function ConsultoriasEmAndamentoPage() {
 
       console.log("Projeto encontrado para finalização:", project)
 
-      // Verificar se o prazo foi atingido
-      const prazoAtingido =
-        project.tipo && project.tempo_dias ? isPrazoAtingido(project.tipo, project.tempo_dias) : false
+      // Calcular dias efetivos (descontando dias pausados)
+      const diasEfetivos = Math.max(0, (project.tempo_dias || 0) - (project.dias_pausados || 0))
 
-      // Calcular comissão
+      // Verificar se o prazo foi atingido baseado nos dias efetivos
+      const prazoAtingido = project.tipo ? isPrazoAtingido(project.tipo, diasEfetivos) : false
+
+      // Calcular comissão baseada nos dias efetivos
       const { percentual, valor } = calculateCommission(project.valor_consultoria || 0, avaliacao, prazoAtingido)
 
       const updateData = {
         id,
-        status: "concluido" as const,
+        status: "concluido",
         data_finalizacao: new Date().toISOString().split("T")[0],
         avaliacao_estrelas: avaliacao,
         prazo_atingido: prazoAtingido,
         percentual_comissao: percentual,
         valor_comissao: valor,
+        assinatura_fechamento: assinaturaFechamento,
+        data_pausa: null, // Limpar data de pausa ao finalizar
+        updated_at: new Date().toISOString(),
       }
 
       console.log("Finalizando consultoria com dados:", updateData)
@@ -183,7 +197,9 @@ export default function ConsultoriasEmAndamentoPage() {
 
       toast({
         title: "Consultoria finalizada",
-        description: `A consultoria para ${project.cliente} foi finalizada com sucesso.`,
+        description: `A consultoria para ${project.cliente} foi finalizada com sucesso.${
+          assinaturaFechamento ? " Assinatura de fechamento confirmada." : ""
+        } Dias efetivos considerados: ${diasEfetivos}`,
       })
 
       // Recarregar dados após finalizar para remover da lista atual
@@ -222,8 +238,10 @@ export default function ConsultoriasEmAndamentoPage() {
       // Atualizar o projeto
       const result = await updateConsultingProject({
         id,
-        status: "cancelado" as const,
+        status: "cancelado",
         data_finalizacao: new Date().toISOString().split("T")[0],
+        data_pausa: null, // Limpar data de pausa ao cancelar
+        updated_at: new Date().toISOString(),
       })
 
       if (!result) {
@@ -250,11 +268,115 @@ export default function ConsultoriasEmAndamentoPage() {
     }
   }
 
+  const handlePause = async (id: string) => {
+    try {
+      setIsLoading(true)
+
+      // Buscar o projeto atual com verificação de segurança
+      const project = projects.find((p) => p && p.id === id)
+      if (!project) {
+        console.error("Projeto não encontrado com ID:", id)
+        throw new Error("Projeto não encontrado")
+      }
+
+      console.log("Projeto encontrado para pausar:", project)
+
+      // Calcular dias já decorridos desde o início
+      const dataInicio = new Date(project.data_inicio)
+      const hoje = new Date()
+      const diasDecorridos = Math.floor((hoje.getTime() - dataInicio.getTime()) / (1000 * 60 * 60 * 24))
+
+      // Atualizar o projeto para pausado
+      const result = await updateConsultingProject({
+        id,
+        data_pausa: new Date().toISOString(),
+        // Incrementar dias pausados se já havia pausas anteriores
+        dias_pausados: project.dias_pausados || 0,
+        updated_at: new Date().toISOString(),
+      })
+
+      if (!result) {
+        throw new Error("Erro ao pausar consultoria")
+      }
+
+      toast({
+        title: "Consultoria pausada",
+        description: `A consultoria para ${project.cliente} foi pausada. Os dias não serão mais contabilizados para bonificação.`,
+      })
+
+      // Recarregar dados
+      await fetchData()
+    } catch (error) {
+      console.error("Error pausing project:", error)
+      toast({
+        title: "Erro",
+        description: error instanceof Error ? error.message : "Não foi possível pausar a consultoria. Tente novamente.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleResume = async (id: string) => {
+    try {
+      setIsLoading(true)
+
+      // Buscar o projeto atual com verificação de segurança
+      const project = projects.find((p) => p && p.id === id)
+      if (!project) {
+        console.error("Projeto não encontrado com ID:", id)
+        throw new Error("Projeto não encontrado")
+      }
+
+      console.log("Projeto encontrado para retomar:", project)
+
+      // Calcular quantos dias ficou pausado
+      if (project.data_pausa) {
+        const dataPausa = new Date(project.data_pausa)
+        const hoje = new Date()
+        const diasPausadosAgora = Math.floor((hoje.getTime() - dataPausa.getTime()) / (1000 * 60 * 60 * 24))
+
+        // Atualizar o projeto para retomar
+        const result = await updateConsultingProject({
+          id,
+          data_pausa: null, // Remove a data de pausa
+          dias_pausados: (project.dias_pausados || 0) + diasPausadosAgora, // Soma os dias pausados
+          updated_at: new Date().toISOString(),
+        })
+
+        if (!result) {
+          throw new Error("Erro ao retomar consultoria")
+        }
+
+        toast({
+          title: "Consultoria retomada",
+          description: `A consultoria para ${project.cliente} foi retomada. Foram pausados ${diasPausadosAgora} dias adicionais.`,
+        })
+      }
+
+      // Recarregar dados
+      await fetchData()
+    } catch (error) {
+      console.error("Error resuming project:", error)
+      toast({
+        title: "Erro",
+        description:
+          error instanceof Error ? error.message : "Não foi possível retomar a consultoria. Tente novamente.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   return (
     <div className="flex flex-col h-full">
       <div className="p-6 bg-[#0056D6] text-white">
         <h1 className="text-2xl font-bold text-white">Consultorias em Andamento</h1>
-        <p className="text-sm text-white/90">Visualize e acompanhe os projetos de consultoria ativos</p>
+        <p className="text-sm text-white/90">
+          Visualize e acompanhe os projetos de consultoria ativos (incluindo pausados)
+        </p>
       </div>
 
       <div className="p-6 space-y-6">
@@ -354,6 +476,12 @@ export default function ConsultoriasEmAndamentoPage() {
           <h2 className="text-xl font-semibold">Projetos em Andamento</h2>
           <div className="text-sm text-muted-foreground">
             Total: {projects.length} projeto{projects.length !== 1 ? "s" : ""}
+            {projects.filter((p) => p.data_pausa).length > 0 && (
+              <span className="text-orange-600 ml-2">
+                ({projects.filter((p) => p.data_pausa).length} pausado
+                {projects.filter((p) => p.data_pausa).length !== 1 ? "s" : ""})
+              </span>
+            )}
           </div>
         </div>
 
@@ -364,6 +492,8 @@ export default function ConsultoriasEmAndamentoPage() {
               isLoading={isLoading}
               onFinalize={handleFinalize}
               onCancel={handleCancel}
+              onPause={handlePause}
+              onResume={handleResume}
             />
           </CardContent>
         </Card>

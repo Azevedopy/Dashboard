@@ -79,7 +79,6 @@ export type ConsultingProject = {
   data_virada?: string
   data_fechamento?: string
   nota_consultoria?: number
-  valor_liquido_projeto?: number
   consultor?: string
   valor_bonus_12?: number
   avaliacao_estrelas?: number
@@ -88,7 +87,10 @@ export type ConsultingProject = {
   data_finalizacao?: string
   valor_comissao?: number
   percentual_comissao?: number
-  // Removido tipo_projeto pois não existe na tabela
+  bonificada?: boolean
+  assinatura_fechamento?: boolean // Campo para confirmar assinatura do cliente
+  data_pausa?: string // Campo para registrar quando foi pausado
+  dias_pausados?: number // Campo para contar total de dias pausados
 }
 
 // Tipo para estatísticas de consultoria
@@ -120,7 +122,6 @@ export type GenierProject = {
   data_virada?: string
   data_fechamento?: string
   nota_consultoria?: number
-  valor_liquido_projeto?: number
   consultor?: string
   valor_bonus_12?: number
   avaliacao_estrelas?: number
@@ -160,7 +161,6 @@ export type SupportProject = {
   data_virada?: string
   data_fechamento?: string
   nota_consultoria?: number
-  valor_liquido_projeto?: number
   consultor?: string
   valor_bonus_12?: number
   avaliacao_estrelas?: number
@@ -201,4 +201,12 @@ export interface ConsultingMetric {
   consulting_value: number
   bonus_8_percent: number
   bonus_12_percent: number
+  is_bonificada?: boolean // Novo campo
+  // Campos de avaliação
+  avaliacao_estrelas?: number
+  nota_consultoria?: string
+  data_finalizacao?: string
+  prazo_atingido?: boolean
+  valor_comissao?: number
+  percentual_comissao?: number
 }

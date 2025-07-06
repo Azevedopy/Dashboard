@@ -20,7 +20,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { toast } from "@/components/ui/use-toast"
 import { Toaster } from "@/components/ui/toaster"
 import { cn } from "@/lib/utils"
-import { getConsultingProjectById, updateConsultingProject } from "@/lib/consulting-service"
+import { getConsultingProject, updateConsultingProject } from "@/lib/consulting-service"
 import { getMembers } from "@/lib/members-service"
 import type { ConsultingProject, Member } from "@/lib/types"
 
@@ -132,7 +132,7 @@ export default function EditProjectPage() {
   const fetchProject = async (id: string) => {
     setIsLoading(true)
     try {
-      const data = await getConsultingProjectById(id)
+      const data = await getConsultingProject(id)
       if (data) {
         console.log("Projeto carregado:", data)
         setProject(data)

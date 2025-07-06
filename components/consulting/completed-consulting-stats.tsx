@@ -1,10 +1,12 @@
 "use client"
 
 import { useMemo } from "react"
-import { TrendingUp, DollarSign, Star, Clock, Target, Award } from "lucide-react"
+import { TrendingUp, DollarSign, Star, Clock, CheckCircle, Target } from "lucide-react"
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
-import type { ConsultingProject } from "@/lib/types"
+import { formatCurrency } from "@/lib/utils"
+import type { ConsultingProject } from "@/lib/consulting-service"
 
 interface CompletedConsultingStatsProps {
   projects?: ConsultingProject[]
@@ -13,78 +15,56 @@ interface CompletedConsultingStatsProps {
 
 export function CompletedConsultingStats({ projects = [], isLoading = false }: CompletedConsultingStatsProps) {
   // Garantir que projects é sempre um array válido
-  const safeProjects = useMemo(() => {
-    if (!Array.isArray(projects)) {
-      console.warn("Projects não é um array válido:", projects)
-      return []
-    }
-    return projects.filter(Boolean) // Remove elementos null/undefined
+  const validProjects = useMemo(() => {
+    if (!Array.isArray(projects)) return []
+    return projects.filter((project) => project != null)
   }, [projects])
 
-  // Filtrar apenas projetos concluídos
-  const completedProjects = useMemo(() => {
-    return safeProjects.filter((project) => project?.status === "concluido")
-  }, [safeProjects])
-
-  // Calcular estatísticas
   const stats = useMemo(() => {
-    if (completedProjects.length === 0) {
+    if (validProjects.length === 0) {
       return {
-        totalProjects: 0,
-        totalRevenue: 0,
-        totalCommissions: 0,
-        averageRating: 0,
-        averageDuration: 0,
-        onTimeRate: 0,
+        totalProjetos: 0,
+        receitaTotal: 0,
+        totalComissoes: 0,
+        avaliacaoMedia: 0,
+        duracaoMedia: 0,
+        taxaCumprimentoPrazo: 0,
       }
     }
 
-    const totalRevenue = completedProjects.reduce((sum, project) => {
-      return sum + (Number(project?.valor_consultoria) || 0)
-    }, 0)
+    const totalProjetos = validProjects.length
+    const receitaTotal = validProjects.reduce((sum, p) => sum + (p.valor_consultoria || 0), 0)
+    const totalComissoes = validProjects.reduce((sum, p) => sum + (p.valor_comissao || 0), 0)
 
-    const totalCommissions = completedProjects.reduce((sum, project) => {
-      return sum + (Number(project?.valor_comissao) || 0)
-    }, 0)
-
-    // Calcular média de avaliação
-    const projectsWithRating = completedProjects.filter(
-      (project) => project?.avaliacao_estrelas && project.avaliacao_estrelas > 0,
-    )
-    const averageRating =
-      projectsWithRating.length > 0
-        ? projectsWithRating.reduce((sum, project) => sum + (project?.avaliacao_estrelas || 0), 0) /
-          projectsWithRating.length
+    // Calcular avaliação média
+    const projetosComAvaliacao = validProjects.filter((p) => p.avaliacao_estrelas)
+    const avaliacaoMedia =
+      projetosComAvaliacao.length > 0
+        ? projetosComAvaliacao.reduce((sum, p) => sum + (p.avaliacao_estrelas || 0), 0) / projetosComAvaliacao.length
         : 0
 
     // Calcular duração média
-    const projectsWithDuration = completedProjects.filter((project) => project?.tempo_dias && project.tempo_dias > 0)
-    const averageDuration =
-      projectsWithDuration.length > 0
-        ? projectsWithDuration.reduce((sum, project) => sum + (project?.tempo_dias || 0), 0) /
-          projectsWithDuration.length
+    const projetosComDuracao = validProjects.filter((p) => p.tempo_dias)
+    const duracaoMedia =
+      projetosComDuracao.length > 0
+        ? projetosComDuracao.reduce((sum, p) => sum + (p.tempo_dias || 0), 0) / projetosComDuracao.length
         : 0
 
     // Calcular taxa de cumprimento de prazo
-    const projectsWithDeadlineInfo = completedProjects.filter(
-      (project) => project?.prazo_atingido !== null && project?.prazo_atingido !== undefined,
-    )
-    const onTimeRate =
-      projectsWithDeadlineInfo.length > 0
-        ? (projectsWithDeadlineInfo.filter((project) => project?.prazo_atingido === true).length /
-            projectsWithDeadlineInfo.length) *
-          100
-        : 0
+    const projetosComPrazo = validProjects.filter((p) => p.prazo_atingido !== null)
+    const projetosNoPrazo = validProjects.filter((p) => p.prazo_atingido === true)
+    const taxaCumprimentoPrazo =
+      projetosComPrazo.length > 0 ? (projetosNoPrazo.length / projetosComPrazo.length) * 100 : 0
 
     return {
-      totalProjects: completedProjects.length,
-      totalRevenue,
-      totalCommissions,
-      averageRating,
-      averageDuration,
-      onTimeRate,
+      totalProjetos,
+      receitaTotal,
+      totalComissoes,
+      avaliacaoMedia,
+      duracaoMedia,
+      taxaCumprimentoPrazo,
     }
-  }, [completedProjects])
+  }, [validProjects])
 
   if (isLoading) {
     return (
@@ -92,12 +72,12 @@ export function CompletedConsultingStats({ projects = [], isLoading = false }: C
         {[...Array(6)].map((_, i) => (
           <Card key={i}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <Skeleton className="h-4 w-32" />
+              <Skeleton className="h-4 w-24" />
               <Skeleton className="h-4 w-4" />
             </CardHeader>
             <CardContent>
-              <Skeleton className="h-8 w-24 mb-2" />
-              <Skeleton className="h-3 w-40" />
+              <Skeleton className="h-8 w-16 mb-1" />
+              <Skeleton className="h-3 w-32" />
             </CardContent>
           </Card>
         ))}
@@ -105,71 +85,82 @@ export function CompletedConsultingStats({ projects = [], isLoading = false }: C
     )
   }
 
-  const cards = [
-    {
-      title: "Projetos Concluídos",
-      value: stats.totalProjects.toString(),
-      description: "Total de consultorias finalizadas",
-      icon: Award,
-      color: "text-blue-600",
-    },
-    {
-      title: "Receita Total",
-      value: `R$ ${stats.totalRevenue.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`,
-      description: "Valor total das consultorias",
-      icon: TrendingUp,
-      color: "text-green-600",
-    },
-    {
-      title: "Total de Comissões",
-      value: `R$ ${stats.totalCommissions.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`,
-      description: "Soma de todas as comissões",
-      icon: DollarSign,
-      color: "text-green-600",
-      highlight: true, // Destacar este card
-    },
-    {
-      title: "Avaliação Média",
-      value: stats.averageRating > 0 ? stats.averageRating.toFixed(1) : "N/A",
-      description: `${stats.averageRating > 0 ? "⭐".repeat(Math.round(stats.averageRating)) : "Sem avaliações"}`,
-      icon: Star,
-      color: "text-yellow-600",
-    },
-    {
-      title: "Duração Média",
-      value: stats.averageDuration > 0 ? `${Math.round(stats.averageDuration)} dias` : "N/A",
-      description: "Tempo médio de projeto",
-      icon: Clock,
-      color: "text-purple-600",
-    },
-    {
-      title: "Taxa de Prazo",
-      value: stats.onTimeRate > 0 ? `${Math.round(stats.onTimeRate)}%` : "N/A",
-      description: "Projetos entregues no prazo",
-      icon: Target,
-      color: "text-indigo-600",
-    },
-  ]
-
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-      {cards.map((card, index) => {
-        const Icon = card.icon
-        return (
-          <Card key={index} className={card.highlight ? "border-green-200 bg-green-50" : ""}>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">{card.title}</CardTitle>
-              <Icon className={`h-4 w-4 ${card.color}`} />
-            </CardHeader>
-            <CardContent>
-              <div className={`text-2xl font-bold ${card.highlight ? "text-green-700" : ""}`}>{card.value}</div>
-              <p className={`text-xs ${card.highlight ? "text-green-600" : "text-muted-foreground"}`}>
-                {card.description}
-              </p>
-            </CardContent>
-          </Card>
-        )
-      })}
+      {/* Total de Projetos Concluídos */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className="text-sm font-medium">Projetos Concluídos</CardTitle>
+          <CheckCircle className="h-4 w-4 text-muted-foreground" />
+        </CardHeader>
+        <CardContent>
+          <div className="text-2xl font-bold">{stats.totalProjetos}</div>
+          <p className="text-xs text-muted-foreground">Total de consultorias finalizadas</p>
+        </CardContent>
+      </Card>
+
+      {/* Receita Total */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className="text-sm font-medium">Receita Total</CardTitle>
+          <TrendingUp className="h-4 w-4 text-muted-foreground" />
+        </CardHeader>
+        <CardContent>
+          <div className="text-2xl font-bold">{formatCurrency(stats.receitaTotal)}</div>
+          <p className="text-xs text-muted-foreground">Valor total das consultorias</p>
+        </CardContent>
+      </Card>
+
+      {/* Total de Comissões - Destacado em verde */}
+      <Card className="bg-green-50 border-green-200">
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className="text-sm font-medium text-green-800">Total de Comissões</CardTitle>
+          <DollarSign className="h-4 w-4 text-green-600" />
+        </CardHeader>
+        <CardContent>
+          <div className="text-2xl font-bold text-green-700">{formatCurrency(stats.totalComissoes)}</div>
+          <p className="text-xs text-green-600">Comissões pagas aos consultores</p>
+        </CardContent>
+      </Card>
+
+      {/* Avaliação Média */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className="text-sm font-medium">Avaliação Média</CardTitle>
+          <Star className="h-4 w-4 text-muted-foreground" />
+        </CardHeader>
+        <CardContent>
+          <div className="text-2xl font-bold flex items-center gap-1">
+            {stats.avaliacaoMedia.toFixed(1)}
+            <Star className="h-5 w-5 text-yellow-400 fill-yellow-400" />
+          </div>
+          <p className="text-xs text-muted-foreground">Média das avaliações recebidas</p>
+        </CardContent>
+      </Card>
+
+      {/* Duração Média */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className="text-sm font-medium">Duração Média</CardTitle>
+          <Clock className="h-4 w-4 text-muted-foreground" />
+        </CardHeader>
+        <CardContent>
+          <div className="text-2xl font-bold">{Math.round(stats.duracaoMedia)} dias</div>
+          <p className="text-xs text-muted-foreground">Tempo médio de execução</p>
+        </CardContent>
+      </Card>
+
+      {/* Taxa de Cumprimento de Prazo */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className="text-sm font-medium">Taxa de Cumprimento</CardTitle>
+          <Target className="h-4 w-4 text-muted-foreground" />
+        </CardHeader>
+        <CardContent>
+          <div className="text-2xl font-bold">{stats.taxaCumprimentoPrazo.toFixed(1)}%</div>
+          <p className="text-xs text-muted-foreground">Projetos entregues no prazo</p>
+        </CardContent>
+      </Card>
     </div>
   )
 }

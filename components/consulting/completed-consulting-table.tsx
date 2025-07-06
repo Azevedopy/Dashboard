@@ -1,183 +1,121 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useEffect } from "react"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
-import { Star, Download, Trash2 } from "lucide-react"
+import { Eye, Edit, Trash2, Star, CheckCircle, XCircle, Clock } from "lucide-react"
+
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Skeleton } from "@/components/ui/skeleton"
-import { deleteConsultingProject } from "@/lib/consulting-service"
-import type { ConsultingProject } from "@/lib/types"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Badge } from "@/components/ui/badge"
+import { toast } from "@/components/ui/use-toast"
+import { getCompletedConsultingProjects, deleteConsultingProject } from "@/lib/consulting-service"
+import type { ConsultingProject } from "@/lib/consulting-service"
 
-interface CompletedConsultingTableProps {
-  projects?: ConsultingProject[]
-  consultores?: string[]
-  isLoading?: boolean
-  onRefresh?: () => void
-}
+export function CompletedConsultingTable() {
+  const [projects, setProjects] = useState<ConsultingProject[]>([])
+  const [isLoading, setIsLoading] = useState(true)
 
-export function CompletedConsultingTable({
-  projects = [],
-  consultores = [],
-  isLoading = false,
-  onRefresh,
-}: CompletedConsultingTableProps) {
-  const [searchTerm, setSearchTerm] = useState("")
-  const [selectedConsultor, setSelectedConsultor] = useState<string>("todos")
-  const [selectedTipo, setSelectedTipo] = useState<string>("todos")
-  const [deletingId, setDeletingId] = useState<string | null>(null)
+  useEffect(() => {
+    loadProjects()
+  }, [])
 
-  // Garantir que projects é sempre um array válido
-  const safeProjects = useMemo(() => {
-    if (!Array.isArray(projects)) {
-      console.warn("Projects não é um array válido:", projects)
-      return []
+  const loadProjects = async () => {
+    try {
+      setIsLoading(true)
+      const data = await getCompletedConsultingProjects()
+      setProjects(data)
+    } catch (error) {
+      console.error("Erro ao carregar projetos concluídos:", error)
+      toast({
+        title: "Erro",
+        description: "Não foi possível carregar os projetos concluídos.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
     }
-    return projects.filter(Boolean) // Remove elementos null/undefined
-  }, [projects])
+  }
 
-  // Garantir que consultores é sempre um array válido
-  const safeConsultores = useMemo(() => {
-    if (!Array.isArray(consultores)) {
-      console.warn("Consultores não é um array válido:", consultores)
-      return []
-    }
-    return consultores.filter(Boolean) // Remove elementos null/undefined
-  }, [consultores])
-
-  // Filtrar projetos concluídos
-  const completedProjects = useMemo(() => {
-    return safeProjects.filter((project) => project?.status === "concluido")
-  }, [safeProjects])
-
-  // Aplicar filtros
-  const filteredProjects = useMemo(() => {
-    let filtered = completedProjects
-
-    // Filtro por termo de busca
-    if (searchTerm) {
-      filtered = filtered.filter(
-        (project) =>
-          project?.cliente?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          project?.consultor?.toLowerCase().includes(searchTerm.toLowerCase()),
-      )
-    }
-
-    // Filtro por consultor
-    if (selectedConsultor !== "todos") {
-      filtered = filtered.filter((project) => project?.consultor === selectedConsultor)
-    }
-
-    // Filtro por tipo
-    if (selectedTipo !== "todos") {
-      filtered = filtered.filter((project) => project?.tipo === selectedTipo)
-    }
-
-    return filtered
-  }, [completedProjects, searchTerm, selectedConsultor, selectedTipo])
-
-  // Calcular total das comissões
-  const totalComissoes = useMemo(() => {
-    return filteredProjects.reduce((sum, project) => {
-      return sum + (Number(project?.valor_comissao) || 0)
-    }, 0)
-  }, [filteredProjects])
-
-  // Função para deletar projeto
   const handleDelete = async (id: string) => {
     if (!confirm("Tem certeza que deseja excluir este projeto?")) {
       return
     }
 
-    setDeletingId(id)
     try {
       const result = await deleteConsultingProject(id)
       if (result.success) {
-        console.log("✅ Projeto deletado com sucesso")
-        onRefresh?.() // Atualizar a lista
+        toast({
+          title: "Sucesso",
+          description: "Projeto excluído com sucesso.",
+        })
+        loadProjects() // Recarregar a lista
       } else {
-        console.error("❌ Erro ao deletar projeto:", result.error)
-        alert(`Erro ao deletar projeto: ${result.error}`)
+        throw new Error(result.error || "Erro ao excluir projeto")
       }
     } catch (error) {
-      console.error("❌ Erro inesperado ao deletar projeto:", error)
-      alert("Erro inesperado ao deletar projeto")
-    } finally {
-      setDeletingId(null)
+      console.error("Erro ao excluir projeto:", error)
+      toast({
+        title: "Erro",
+        description: "Não foi possível excluir o projeto.",
+        variant: "destructive",
+      })
     }
   }
 
-  // Função para exportar dados
-  const handleExport = () => {
-    const csvContent = [
-      // Cabeçalho
-      [
-        "Cliente",
-        "Tipo",
-        "Porte",
-        "Consultor",
-        "Data Início",
-        "Data Término",
-        "Data Finalização",
-        "Duração (dias)",
-        "Valor Consultoria",
-        "Valor Comissão",
-        "% Comissão",
-        "Avaliação",
-        "Prazo Atingido",
-        "Observações",
-      ].join(","),
-      // Dados
-      ...filteredProjects.map((project) =>
-        [
-          `"${project?.cliente || ""}"`,
-          project?.tipo || "",
-          project?.porte || "",
-          `"${project?.consultor || ""}"`,
-          project?.data_inicio || "",
-          project?.data_termino || "",
-          project?.data_finalizacao || "",
-          project?.tempo_dias || 0,
-          project?.valor_consultoria || 0,
-          project?.valor_comissao || 0,
-          project?.percentual_comissao || 0,
-          project?.avaliacao_estrelas || "",
-          project?.prazo_atingido ? "Sim" : "Não",
-          `"${project?.nota_consultoria || ""}"`,
-        ].join(","),
-      ),
-    ].join("\n")
-
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
-    const link = document.createElement("a")
-    const url = URL.createObjectURL(blob)
-    link.setAttribute("href", url)
-    link.setAttribute("download", `consultorias-concluidas-${format(new Date(), "yyyy-MM-dd")}.csv`)
-    link.style.visibility = "hidden"
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat("pt-BR", {
+      style: "currency",
+      currency: "BRL",
+    }).format(value)
   }
 
-  // Renderizar estrelas
-  const renderStars = (rating: number | null | undefined) => {
-    if (!rating) return <span className="text-gray-400">-</span>
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case "concluido":
+        return <Badge className="bg-green-100 text-green-800">Concluído</Badge>
+      case "em_andamento":
+        return <Badge className="bg-blue-100 text-blue-800">Em Andamento</Badge>
+      case "cancelado":
+        return <Badge className="bg-red-100 text-red-800">Cancelado</Badge>
+      default:
+        return <Badge variant="secondary">{status}</Badge>
+    }
+  }
 
+  const getPorteBadge = (porte: string) => {
+    const porteColors = {
+      basic: "bg-gray-100 text-gray-800",
+      starter: "bg-blue-100 text-blue-800",
+      pro: "bg-purple-100 text-purple-800",
+      enterprise: "bg-orange-100 text-orange-800",
+    }
+
+    return (
+      <Badge className={porteColors[porte as keyof typeof porteColors] || "bg-gray-100 text-gray-800"}>
+        {porte.charAt(0).toUpperCase() + porte.slice(1)}
+      </Badge>
+    )
+  }
+
+  const renderStars = (rating: number) => {
     return (
       <div className="flex items-center gap-1">
         {[1, 2, 3, 4, 5].map((star) => (
-          <Star
-            key={star}
-            className={`h-4 w-4 ${star <= rating ? "fill-yellow-400 text-yellow-400" : "text-gray-300"}`}
-          />
+          <Star key={star} className={`h-4 w-4 ${star <= rating ? "text-yellow-500 fill-current" : "text-gray-300"}`} />
         ))}
-        <span className="ml-1 text-sm text-gray-600">({rating})</span>
+        <span className="ml-1 text-sm text-muted-foreground">({rating})</span>
       </div>
+    )
+  }
+
+  const getPrazoIcon = (prazoAtingido: boolean | null) => {
+    if (prazoAtingido === null) return <Clock className="h-4 w-4 text-gray-400" />
+    return prazoAtingido ? (
+      <CheckCircle className="h-4 w-4 text-green-600" />
+    ) : (
+      <XCircle className="h-4 w-4 text-red-600" />
     )
   }
 
@@ -188,16 +126,10 @@ export function CompletedConsultingTable({
           <CardTitle>Consultorias Concluídas</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            <div className="flex gap-4">
-              <Skeleton className="h-10 w-64" />
-              <Skeleton className="h-10 w-48" />
-              <Skeleton className="h-10 w-48" />
-            </div>
-            <div className="space-y-2">
-              {[...Array(5)].map((_, i) => (
-                <Skeleton key={i} className="h-16 w-full" />
-              ))}
+          <div className="flex items-center justify-center py-8">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+              <p className="mt-2 text-sm text-muted-foreground">Carregando projetos...</p>
             </div>
           </div>
         </CardContent>
@@ -208,153 +140,121 @@ export function CompletedConsultingTable({
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <CardTitle>Consultorias Concluídas</CardTitle>
-            <Badge variant="secondary" className="bg-green-100 text-green-800">
-              Total Comissões: R$ {totalComissoes.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-            </Badge>
-          </div>
-          <Button onClick={handleExport} variant="outline" size="sm">
-            <Download className="h-4 w-4 mr-2" />
-            Exportar
-          </Button>
-        </div>
+        <CardTitle className="flex items-center justify-between">
+          Consultorias Concluídas
+          <Badge variant="secondary">{projects.length} projetos</Badge>
+        </CardTitle>
       </CardHeader>
       <CardContent>
-        {/* Filtros */}
-        <div className="flex flex-col sm:flex-row gap-4 mb-6">
-          <div className="flex-1">
-            <Input
-              placeholder="Buscar por cliente ou consultor..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full"
-            />
+        {projects.length === 0 ? (
+          <div className="text-center py-8">
+            <p className="text-muted-foreground">Nenhuma consultoria concluída encontrada.</p>
           </div>
-          <Select value={selectedConsultor} onValueChange={setSelectedConsultor}>
-            <SelectTrigger className="w-full sm:w-48">
-              <SelectValue placeholder="Consultor" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="todos">Todos os consultores</SelectItem>
-              {safeConsultores.map((consultor) => (
-                <SelectItem key={consultor} value={consultor}>
-                  {consultor}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={selectedTipo} onValueChange={setSelectedTipo}>
-            <SelectTrigger className="w-full sm:w-48">
-              <SelectValue placeholder="Tipo" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="todos">Todos os tipos</SelectItem>
-              <SelectItem value="consultoria">Consultoria</SelectItem>
-              <SelectItem value="upsell">Upsell</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* Tabela */}
-        <div className="rounded-md border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Cliente</TableHead>
-                <TableHead>Consultor</TableHead>
-                <TableHead>Tipo</TableHead>
-                <TableHead>Porte</TableHead>
-                <TableHead>Finalização</TableHead>
-                <TableHead>Duração</TableHead>
-                <TableHead>Valor</TableHead>
-                <TableHead>Comissão</TableHead>
-                <TableHead>Avaliação</TableHead>
-                <TableHead>Prazo</TableHead>
-                <TableHead className="w-[50px]">Ações</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredProjects.length === 0 ? (
+        ) : (
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={11} className="text-center py-8 text-gray-500">
-                    {completedProjects.length === 0
-                      ? "Nenhuma consultoria concluída encontrada"
-                      : "Nenhuma consultoria encontrada com os filtros aplicados"}
-                  </TableCell>
+                  <TableHead>Cliente</TableHead>
+                  <TableHead>Consultor</TableHead>
+                  <TableHead>Tipo</TableHead>
+                  <TableHead>Porte</TableHead>
+                  <TableHead>Período</TableHead>
+                  <TableHead>Duração</TableHead>
+                  <TableHead>Valor</TableHead>
+                  <TableHead>Avaliação</TableHead>
+                  <TableHead>Prazo</TableHead>
+                  <TableHead>Comissão</TableHead>
+                  <TableHead>Bonificada</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
-              ) : (
-                <>
-                  {filteredProjects.map((project) => (
-                    <TableRow key={project?.id}>
-                      <TableCell className="font-medium">{project?.cliente || "-"}</TableCell>
-                      <TableCell>{project?.consultor || "-"}</TableCell>
-                      <TableCell>
-                        <Badge variant={project?.tipo === "upsell" ? "secondary" : "default"}>
-                          {project?.tipo || "-"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{project?.porte || "-"}</Badge>
-                      </TableCell>
-                      <TableCell>
-                        {project?.data_finalizacao
-                          ? format(new Date(project.data_finalizacao), "dd/MM/yyyy", { locale: ptBR })
-                          : "-"}
-                      </TableCell>
-                      <TableCell>{project?.tempo_dias || 0} dias</TableCell>
-                      <TableCell>
-                        R$ {(project?.valor_consultoria || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                      </TableCell>
-                      <TableCell className="font-medium text-green-600">
-                        R$ {(project?.valor_comissao || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                        <div className="text-xs text-gray-500">{project?.percentual_comissao || 0}%</div>
-                      </TableCell>
-                      <TableCell>{renderStars(project?.avaliacao_estrelas)}</TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={project?.prazo_atingido ? "default" : "destructive"}
-                          className={
-                            project?.prazo_atingido ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
-                          }
-                        >
-                          {project?.prazo_atingido ? "Sim" : "Não"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
+              </TableHeader>
+              <TableBody>
+                {projects.map((project) => (
+                  <TableRow key={project.id}>
+                    <TableCell className="font-medium">{project.cliente}</TableCell>
+                    <TableCell>{project.consultor}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline">{project.tipo === "consultoria" ? "Consultoria" : "Upsell"}</Badge>
+                    </TableCell>
+                    <TableCell>{getPorteBadge(project.porte)}</TableCell>
+                    <TableCell>
+                      <div className="text-sm">
+                        <div>{format(new Date(project.data_inicio), "dd/MM/yyyy", { locale: ptBR })}</div>
+                        <div className="text-muted-foreground">
+                          até {format(new Date(project.data_termino), "dd/MM/yyyy", { locale: ptBR })}
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <span className="font-medium">{project.tempo_dias || 0} dias</span>
+                    </TableCell>
+                    <TableCell>
+                      <div className="text-sm">
+                        <div className="font-medium">{formatCurrency(project.valor_consultoria)}</div>
+                        {project.bonificada && <div className="text-xs text-blue-600">Bonificada</div>}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      {project.avaliacao_estrelas ? (
+                        renderStars(project.avaliacao_estrelas)
+                      ) : (
+                        <span className="text-muted-foreground text-sm">Não avaliado</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        {getPrazoIcon(project.prazo_atingido)}
+                        <span className="text-sm">
+                          {project.prazo_atingido === null ? "N/A" : project.prazo_atingido ? "Atingido" : "Excedido"}
+                        </span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="text-sm">
+                        <div className="font-medium">{formatCurrency(project.valor_comissao || 0)}</div>
+                        <div className="text-muted-foreground">{project.percentual_comissao || 0}%</div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      {project.bonificada ? (
+                        <Badge className="bg-blue-100 text-blue-800">Sim</Badge>
+                      ) : (
+                        <Badge variant="outline">Não</Badge>
+                      )}
+                    </TableCell>
+                    <TableCell>{getStatusBadge(project.status || "concluido")}</TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex items-center justify-end gap-2">
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleDelete(project?.id)}
-                          disabled={deletingId === project?.id}
-                          className="text-red-600 hover:text-red-800 hover:bg-red-50"
+                          onClick={() => window.open(`/consultoria/projetos/${project.id}`, "_blank")}
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => window.open(`/consultoria/projetos/editar/${project.id}`, "_blank")}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDelete(project.id)}
+                          className="text-red-600 hover:text-red-700"
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {/* Linha de total */}
-                  <TableRow className="bg-green-50 font-medium">
-                    <TableCell colSpan={7} className="text-right">
-                      <strong>Total das Comissões:</strong>
+                      </div>
                     </TableCell>
-                    <TableCell className="text-green-600 font-bold">
-                      R$ {totalComissoes.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                    </TableCell>
-                    <TableCell colSpan={3}></TableCell>
                   </TableRow>
-                </>
-              )}
-            </TableBody>
-          </Table>
-        </div>
-
-        {/* Resumo */}
-        {filteredProjects.length > 0 && (
-          <div className="mt-4 text-sm text-gray-600">
-            Mostrando {filteredProjects.length} de {completedProjects.length} consultorias concluídas
+                ))}
+              </TableBody>
+            </Table>
           </div>
         )}
       </CardContent>
