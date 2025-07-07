@@ -354,7 +354,7 @@ export function exportCompletedConsultingReportToPDF(projects: ConsultingProject
       yPosition = 30
     }
 
-    // Linha de Totais Completos
+    // Linha de Totais Completos - APENAS CAMPOS RELEVANTES
     doc.setFontSize(14)
     doc.setFont("helvetica", "bold")
     const totalsTitle = "TOTAIS GERAIS"
@@ -363,30 +363,43 @@ export function exportCompletedConsultingReportToPDF(projects: ConsultingProject
     doc.text(totalsTitle, totalsTitleX, yPosition)
     yPosition += 15
 
+    // Linha de totais simplificada - removendo campos desnecessários
     const totalsData = [
       [
-        "TOTAL",
-        "",
-        "",
-        "",
-        projects.reduce((sum, p) => sum + (p.tempo_dias || 0), 0).toString(),
-        "",
-        "",
-        "",
-        `R$ ${totalValorConsultoria.toLocaleString("pt-BR", { minimumFractionDigits: 0 })}`,
-        `R$ ${totalBonus.toLocaleString("pt-BR", { minimumFractionDigits: 0 })}`,
-        `R$ ${totalValorLiquido.toLocaleString("pt-BR", { minimumFractionDigits: 0 })}`,
-        `${projetosBonificados}/${projects.length}`,
-        `${projetosPagos}/${projects.length}`,
-        "",
-        `R$ ${totalEstimativa.toLocaleString("pt-BR", { minimumFractionDigits: 0 })}`,
-        `R$ ${totalPago.toLocaleString("pt-BR", { minimumFractionDigits: 0 })}`,
+        "TOTAL", // Cliente
+        "", // Porte (vazio)
+        `R$ ${totalValorConsultoria.toLocaleString("pt-BR", { minimumFractionDigits: 0 })}`, // Vlr Consult.
+        `R$ ${totalBonus.toLocaleString("pt-BR", { minimumFractionDigits: 0 })}`, // Bônus
+        `R$ ${totalValorLiquido.toLocaleString("pt-BR", { minimumFractionDigits: 0 })}`, // Vlr Líq. 16%
+        `${projetosBonificados}/${projects.length}`, // Rec. Bonus
+        `${projetosPagos}/${projects.length}`, // Pago
+        "", // Mês Bonus (vazio)
+        `R$ ${totalEstimativa.toLocaleString("pt-BR", { minimumFractionDigits: 0 })}`, // Tot. Estim.
+        `R$ ${totalPago.toLocaleString("pt-BR", { minimumFractionDigits: 0 })}`, // Tot. Pago
       ],
     ]
 
+    // Headers simplificados para totais (apenas campos relevantes)
+    const totalsHeaders = [
+      "Cliente",
+      "Porte",
+      "Vlr Consult.",
+      "Bônus",
+      "Vlr Líq. 16%",
+      "Rec. Bonus",
+      "Pago",
+      "Mês Bonus",
+      "Tot. Estim.",
+      "Tot. Pago",
+    ]
+
+    // Calcular largura da tabela de totais
+    const totalsTableWidth = 18 + 12 + 16 + 14 + 16 + 12 + 10 + 12 + 16 + 16 // 142px
+    const totalsMarginLeft = (pageWidth - totalsTableWidth) / 2
+
     autoTable(doc, {
       startY: yPosition,
-      head: [headers],
+      head: [totalsHeaders],
       body: totalsData,
       theme: "grid",
       headStyles: {
@@ -402,24 +415,18 @@ export function exportCompletedConsultingReportToPDF(projects: ConsultingProject
         fontSize: 8,
       },
       columnStyles: {
-        0: { cellWidth: 18 },
-        1: { cellWidth: 12 },
-        2: { cellWidth: 12 },
-        3: { cellWidth: 12 },
-        4: { cellWidth: 8, halign: "center" },
-        5: { cellWidth: 12 },
-        6: { cellWidth: 10 },
-        7: { cellWidth: 12 },
-        8: { cellWidth: 16, halign: "right" },
-        9: { cellWidth: 14, halign: "right" },
-        10: { cellWidth: 16, halign: "right" },
-        11: { cellWidth: 12, halign: "center" },
-        12: { cellWidth: 10, halign: "center" },
-        13: { cellWidth: 12 },
-        14: { cellWidth: 16, halign: "right" },
-        15: { cellWidth: 16, halign: "right" },
+        0: { cellWidth: 18 }, // Cliente
+        1: { cellWidth: 12 }, // Porte
+        2: { cellWidth: 16, halign: "right" }, // Vlr Consult.
+        3: { cellWidth: 14, halign: "right" }, // Bônus
+        4: { cellWidth: 16, halign: "right" }, // Vlr Líq. 16%
+        5: { cellWidth: 12, halign: "center" }, // Rec. Bonus
+        6: { cellWidth: 10, halign: "center" }, // Pago
+        7: { cellWidth: 12 }, // Mês Bonus
+        8: { cellWidth: 16, halign: "right" }, // Tot. Estim.
+        9: { cellWidth: 16, halign: "right" }, // Tot. Pago
       },
-      margin: { left: tableMarginLeft }, // Mesma centralização da tabela principal
+      margin: { left: totalsMarginLeft }, // Centralizar tabela de totais
     })
 
     // Análise por Status de Pagamento
