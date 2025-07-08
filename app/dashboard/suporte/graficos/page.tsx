@@ -3,7 +3,7 @@
 import { Skeleton } from "@/components/ui/skeleton"
 
 import { useState, useEffect } from "react"
-import { format, subDays, startOfMonth } from "date-fns"
+import { format, subDays, startOfMonth, isValid } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { CalendarIcon, RefreshCw, Filter, X, Info, Edit, Download } from "lucide-react"
 
@@ -237,9 +237,13 @@ export default function GraficosPage() {
 
     // Se estiver usando período customizado, manter as datas
     if (period === "custom") {
-      const startDate = format(dateRange.from, "yyyy-MM-dd")
-      const endDate = format(dateRange.to, "yyyy-MM-dd")
-      await fetchData(startDate, endDate)
+      if (dateRange.from && dateRange.to && isValid(dateRange.from) && isValid(dateRange.to)) {
+        const startDate = format(dateRange.from, "yyyy-MM-dd")
+        const endDate = format(dateRange.to, "yyyy-MM-dd")
+        await fetchData(startDate, endDate)
+      } else {
+        await fetchData()
+      }
     } else {
       await fetchData()
     }
@@ -251,7 +255,10 @@ export default function GraficosPage() {
   }
 
   const handleCustomDateFilter = async () => {
-    if (!dateRange.from || !dateRange.to) {
+    console.log("=== APLICANDO FILTRO CUSTOMIZADO ===")
+    console.log("DateRange atual:", dateRange)
+
+    if (!dateRange.from || !dateRange.to || !isValid(dateRange.from) || !isValid(dateRange.to)) {
       toast({
         title: "Período inválido",
         description: "Selecione uma data de início e fim válidas.",
@@ -260,23 +267,42 @@ export default function GraficosPage() {
       return
     }
 
-    // Usar as datas selecionadas no calendário para filtrar
-    const startDate = format(dateRange.from, "yyyy-MM-dd")
-    const endDate = format(dateRange.to, "yyyy-MM-dd")
+    try {
+      // Usar as datas selecionadas no calendário para filtrar
+      const startDate = format(dateRange.from, "yyyy-MM-dd")
+      const endDate = format(dateRange.to, "yyyy-MM-dd")
 
-    console.log(`Aplicando filtro customizado: ${startDate} até ${endDate}`)
+      console.log(`Aplicando filtro customizado: ${startDate} até ${endDate}`)
 
-    // Definir como custom ANTES de buscar os dados
-    setPeriod("custom")
-    setIsCalendarOpen(false)
+      // Definir como custom ANTES de buscar os dados
+      setPeriod("custom")
+      setIsCalendarOpen(false)
 
-    // Buscar dados com as datas customizadas
-    await fetchData(startDate, endDate)
+      // Buscar dados com as datas customizadas
+      await fetchData(startDate, endDate)
+
+      toast({
+        title: "Filtro aplicado",
+        description: `Período: ${format(dateRange.from, "dd/MM/yyyy", { locale: ptBR })} - ${format(dateRange.to, "dd/MM/yyyy", { locale: ptBR })}`,
+      })
+    } catch (error) {
+      console.error("Erro ao aplicar filtro customizado:", error)
+      toast({
+        title: "Erro ao aplicar filtro",
+        description: "Não foi possível aplicar o filtro. Tente novamente.",
+        variant: "destructive",
+      })
+    }
   }
 
-  // Função para alterar período
   const handlePeriodChange = (newPeriod: string) => {
     console.log(`Alterando período de ${period} para ${newPeriod}`)
+
+    // Se estiver mudando de custom para outro período, resetar o calendário
+    if (period === "custom" && newPeriod !== "custom") {
+      setIsCalendarOpen(false)
+    }
+
     setPeriod(newPeriod)
 
     // Se não for customizado, atualizar o dateRange automaticamente
@@ -385,9 +411,13 @@ export default function GraficosPage() {
   const handleEditSuccess = () => {
     // Recarregar dados após edição
     if (period === "custom") {
-      const startDate = format(dateRange.from, "yyyy-MM-dd")
-      const endDate = format(dateRange.to, "yyyy-MM-dd")
-      fetchData(startDate, endDate)
+      if (dateRange.from && dateRange.to && isValid(dateRange.from) && isValid(dateRange.to)) {
+        const startDate = format(dateRange.from, "yyyy-MM-dd")
+        const endDate = format(dateRange.to, "yyyy-MM-dd")
+        fetchData(startDate, endDate)
+      } else {
+        fetchData()
+      }
     } else {
       fetchData()
     }
@@ -400,7 +430,11 @@ export default function GraficosPage() {
 
   const formatDate = (dateString) => {
     try {
-      return format(new Date(dateString), "dd/MM/yyyy", { locale: ptBR })
+      const date = new Date(dateString)
+      if (!isValid(date)) {
+        return dateString
+      }
+      return format(date, "dd/MM/yyyy", { locale: ptBR })
     } catch (error) {
       return dateString
     }
@@ -453,10 +487,20 @@ export default function GraficosPage() {
     }
   }
 
-  // Função para obter o texto do período atual
+  // Função para obter o texto do período atual - CORRIGIDA
   const getCurrentPeriodText = () => {
     if (period === "custom") {
-      return `${format(dateRange.from, "dd/MM/yyyy", { locale: ptBR })} - ${format(dateRange.to, "dd/MM/yyyy", { locale: ptBR })}`
+      // Verificar se as datas são válidas antes de formatar
+      if (dateRange.from && dateRange.to && isValid(dateRange.from) && isValid(dateRange.to)) {
+        try {
+          return `${format(dateRange.from, "dd/MM/yyyy", { locale: ptBR })} - ${format(dateRange.to, "dd/MM/yyyy", { locale: ptBR })}`
+        } catch (error) {
+          console.error("Erro ao formatar datas customizadas:", error)
+          return "Período personalizado"
+        }
+      } else {
+        return "Período personalizado"
+      }
     }
 
     switch (period) {
@@ -596,7 +640,7 @@ export default function GraficosPage() {
               <div className="flex gap-2">
                 <Popover open={isFilterOpen} onOpenChange={setIsFilterOpen}>
                   <PopoverTrigger asChild>
-                    <Button variant="outline" className="relative">
+                    <Button variant="outline" className="relative bg-transparent">
                       <Filter className="h-4 w-4 mr-2" />
                       Atendentes
                       {selectedCount < totalMembers && selectedCount > 0 && (
@@ -681,7 +725,7 @@ export default function GraficosPage() {
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <Button variant="outline" size="icon" className="relative">
+                      <Button variant="outline" size="icon" className="relative bg-transparent">
                         <Info className="h-4 w-4" />
                       </Button>
                     </TooltipTrigger>
@@ -734,32 +778,68 @@ export default function GraficosPage() {
                 <label className="text-sm font-medium mb-2 block">Período personalizado</label>
                 <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
                   <PopoverTrigger asChild>
-                    <Button variant="outline" className="w-full justify-start text-left font-normal">
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {dateRange.from ? (
-                        dateRange.to ? (
+                    <Button
+                      variant="outline"
+                      className="w-full justify-start text-left font-normal min-h-[40px] px-3 bg-transparent"
+                      onClick={() => setIsCalendarOpen(!isCalendarOpen)}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4 flex-shrink-0" />
+                      <span className="truncate">
+                        {dateRange.from && dateRange.to && isValid(dateRange.from) && isValid(dateRange.to) ? (
                           <>
                             {format(dateRange.from, "dd/MM/yyyy", { locale: ptBR })} -{" "}
                             {format(dateRange.to, "dd/MM/yyyy", { locale: ptBR })}
                           </>
-                        ) : (
+                        ) : dateRange.from && isValid(dateRange.from) ? (
                           format(dateRange.from, "dd/MM/yyyy", { locale: ptBR })
-                        )
-                      ) : (
-                        "Selecione um período"
-                      )}
+                        ) : (
+                          "Selecione um período"
+                        )}
+                      </span>
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      mode="range"
-                      selected={dateRange}
-                      onSelect={(range) => setDateRange(range || { from: undefined, to: undefined })}
-                      locale={ptBR}
-                      initialFocus
-                    />
-                    <div className="p-3 border-t border-border">
-                      <Button size="sm" className="w-full" onClick={handleCustomDateFilter}>
+                  <PopoverContent className="w-auto p-0 max-w-[95vw]" align="start" side="bottom" sideOffset={4}>
+                    <div className="p-3">
+                      <Calendar
+                        mode="range"
+                        selected={dateRange}
+                        onSelect={(range) => {
+                          console.log("Calendar selection:", range)
+                          if (range) {
+                            setDateRange({
+                              from: range.from || null,
+                              to: range.to || null,
+                            })
+                          } else {
+                            setDateRange({ from: null, to: null })
+                          }
+                        }}
+                        locale={ptBR}
+                        initialFocus
+                        numberOfMonths={typeof window !== "undefined" && window.innerWidth < 768 ? 1 : 2}
+                        className="rounded-md"
+                      />
+                    </div>
+                    <div className="p-3 border-t border-border flex flex-col sm:flex-row gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1 bg-transparent"
+                        onClick={() => {
+                          setDateRange({ from: null, to: null })
+                          console.log("Calendar cleared")
+                        }}
+                      >
+                        Limpar
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="flex-1"
+                        onClick={handleCustomDateFilter}
+                        disabled={
+                          !dateRange.from || !dateRange.to || !isValid(dateRange.from) || !isValid(dateRange.to)
+                        }
+                      >
                         Aplicar Filtro
                       </Button>
                     </div>
