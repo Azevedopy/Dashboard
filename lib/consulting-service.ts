@@ -429,6 +429,42 @@ export async function getActiveConsultingProjects(): Promise<ConsultingProject[]
   return getConsultingProjects({ status: "em_andamento" })
 }
 
+// Função auxiliar para validar e converter valores numéricos
+function parseNumericValue(value: any): number | null {
+  if (value === null || value === undefined || value === "") {
+    return null
+  }
+
+  const parsed = typeof value === "string" ? Number.parseFloat(value) : Number(value)
+  return isNaN(parsed) ? null : parsed
+}
+
+// Função auxiliar para validar e converter valores inteiros
+function parseIntegerValue(value: any): number | null {
+  if (value === null || value === undefined || value === "") {
+    return null
+  }
+
+  const parsed = typeof value === "string" ? Number.parseInt(value, 10) : Number(value)
+  return isNaN(parsed) ? null : parsed
+}
+
+// Função auxiliar para validar strings
+function parseStringValue(value: any): string | null {
+  if (value === null || value === undefined || value === "") {
+    return null
+  }
+  return String(value).trim()
+}
+
+// Função auxiliar para validar booleanos
+function parseBooleanValue(value: any): boolean {
+  if (value === null || value === undefined) {
+    return false
+  }
+  return Boolean(value)
+}
+
 export async function createConsultingMetric(metricData: {
   date: string
   member_id?: string
@@ -455,44 +491,91 @@ export async function createConsultingMetric(metricData: {
   try {
     console.log("🔄 Criando métrica de consultoria:", metricData)
 
-    // Map the data to match the database schema - removing 'data' column
-    const dbData = {
-      consultor: metricData.consultor,
-      cliente: metricData.client,
-      tipo: metricData.project_type,
-      status: metricData.status,
-      porte: metricData.size,
-      data_inicio: metricData.start_date,
-      data_termino: metricData.end_date,
-      tempo_dias: metricData.duration,
-      valor_consultoria: metricData.consulting_value,
-      valor_bonus: metricData.bonus_8_percent,
-      bonificada: metricData.is_bonificada || false,
-      dias_pausados: 0, // Novo projeto sempre começa com 0 dias pausados
-      data_pausa: null, // Novo projeto não está pausado
-      assinatura_fechamento: false, // Novo projeto não tem assinatura ainda
-      // Add evaluation fields if status is completed
-      ...(metricData.status === "concluido" && {
-        avaliacao_estrelas: metricData.avaliacao_estrelas,
-        nota_consultoria: metricData.nota_consultoria,
-        data_finalizacao: metricData.data_finalizacao,
-        prazo_atingido: metricData.prazo_atingido,
-        valor_comissao: metricData.valor_comissao,
-        percentual_comissao: metricData.percentual_comissao,
-      }),
+    // Validar e limpar dados antes de enviar para o banco
+    const cleanedData = {
+      consultor: parseStringValue(metricData.consultor),
+      cliente: parseStringValue(metricData.client),
+      tipo: parseStringValue(metricData.project_type),
+      status: parseStringValue(metricData.status),
+      porte: parseStringValue(metricData.size),
+      data_inicio: parseStringValue(metricData.start_date),
+      data_termino: parseStringValue(metricData.end_date),
+      tempo_dias: parseIntegerValue(metricData.duration),
+      valor_consultoria: parseNumericValue(metricData.consulting_value),
+      valor_bonus: parseNumericValue(metricData.bonus_8_percent),
+      valor_bonus_12: parseNumericValue(metricData.bonus_12_percent),
+      bonificada: parseBooleanValue(metricData.is_bonificada),
+      dias_pausados: 0,
+      data_pausa: null,
+      assinatura_fechamento: false,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }
 
-    console.log("📝 Dados formatados para o banco:", dbData)
+    // Adicionar campos de avaliação apenas se status for concluído
+    if (metricData.status === "concluido") {
+      Object.assign(cleanedData, {
+        avaliacao_estrelas: parseIntegerValue(metricData.avaliacao_estrelas),
+        nota_consultoria: parseStringValue(metricData.nota_consultoria),
+        data_finalizacao: parseStringValue(metricData.data_finalizacao),
+        prazo_atingido: parseBooleanValue(metricData.prazo_atingido),
+        valor_comissao: parseNumericValue(metricData.valor_comissao),
+        percentual_comissao: parseNumericValue(metricData.percentual_comissao),
+      })
+    }
 
-    const { data, error } = await supabase.from("metrics_consultoria").insert([dbData]).select().single()
+    console.log("📝 Dados limpos para inserção:", cleanedData)
+
+    // Validar campos obrigatórios
+    const requiredFields = ["consultor", "cliente", "tipo", "status", "porte", "data_inicio", "data_termino"]
+    const missingFields = requiredFields.filter((field) => !cleanedData[field as keyof typeof cleanedData])
+
+    if (missingFields.length > 0) {
+      throw new Error(`Campos obrigatórios faltando: ${missingFields.join(", ")}`)
+    }
+
+    // Validar valores específicos
+    const validTipos = ["Consultoria", "Upsell"]
+    if (!validTipos.includes(cleanedData.tipo!)) {
+      throw new Error(`Tipo inválido: ${cleanedData.tipo}. Valores aceitos: ${validTipos.join(", ")}`)
+    }
+
+    const validPortes = ["basic", "starter", "pro", "enterprise"]
+    if (!validPortes.includes(cleanedData.porte!)) {
+      throw new Error(`Porte inválido: ${cleanedData.porte}. Valores aceitos: ${validPortes.join(", ")}`)
+    }
+
+    const validStatus = ["em_andamento", "concluido", "cancelado"]
+    if (!validStatus.includes(cleanedData.status!)) {
+      throw new Error(`Status inválido: ${cleanedData.status}. Valores aceitos: ${validStatus.join(", ")}`)
+    }
+
+    // Se for concluído, validar campos de avaliação
+    if (cleanedData.status === "concluido") {
+      if (!cleanedData.avaliacao_estrelas || cleanedData.avaliacao_estrelas < 1 || cleanedData.avaliacao_estrelas > 5) {
+        throw new Error("Avaliação por estrelas é obrigatória para projetos concluídos (1-5)")
+      }
+    }
+
+    const { data, error } = await supabase.from("metrics_consultoria").insert([cleanedData]).select().single()
 
     if (error) {
       console.error("❌ Erro ao inserir no banco:", error)
+
+      // Análise específica do erro
+      let errorMessage = `Erro no banco de dados: ${error.message}`
+
+      if (error.message.includes("invalid input syntax for type integer")) {
+        errorMessage = `❌ Erro de tipo de dados: Um campo numérico recebeu um valor inválido. Verifique se todos os números estão corretos.`
+      } else if (error.message.includes("check constraint")) {
+        errorMessage = `❌ Erro de validação: ${error.message}. Verifique se os valores estão dentro dos limites aceitos.`
+      } else if (error.message.includes("not-null constraint")) {
+        errorMessage = `❌ Campo obrigatório não preenchido: ${error.message}`
+      }
+
       return {
         success: false,
-        error: `Erro no banco de dados: ${error.message}`,
+        error: errorMessage,
       }
     }
 

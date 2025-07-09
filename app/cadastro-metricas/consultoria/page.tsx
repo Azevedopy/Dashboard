@@ -68,7 +68,7 @@ export default function ConsultingMetricsForm() {
     { value: "Upsell", label: "Upsell" },
   ]
 
-  // Buscar consultores do sistema - CORRIGIDO
+  // Buscar consultores do sistema
   useEffect(() => {
     async function fetchConsultants() {
       try {
@@ -250,7 +250,7 @@ export default function ConsultingMetricsForm() {
   const validateForm = () => {
     const newErrors: Record<string, string> = {}
 
-    if (!client) newErrors.client = "Cliente é obrigatório"
+    if (!client.trim()) newErrors.client = "Cliente é obrigatório"
     if (!projectType) newErrors.projectType = "Tipo é obrigatório"
     if (!memberId) newErrors.memberId = "Consultor é obrigatório"
     if (!status) newErrors.status = "Status é obrigatório"
@@ -278,6 +278,15 @@ export default function ConsultingMetricsForm() {
     // Validar avaliação se status for concluído
     if (status === "concluido" && avaliacaoEstrelas === 0) {
       newErrors.avaliacaoEstrelas = "Avaliação é obrigatória para consultorias concluídas"
+    }
+
+    // Validar valores numéricos
+    if (consultingValue < 0) {
+      newErrors.consultingValue = "Valor da consultoria deve ser positivo"
+    }
+
+    if (duration < 0) {
+      newErrors.duration = "Duração deve ser positiva"
     }
 
     setErrors(newErrors)
@@ -316,6 +325,10 @@ export default function ConsultingMetricsForm() {
       const consultant = consultants.find((c) => c.id === memberId)
       const consultorName = consultant ? consultant.name : ""
 
+      if (!consultorName) {
+        throw new Error("Consultor não encontrado")
+      }
+
       console.log("📝 Dados do formulário antes do envio:", {
         consultant,
         consultorName,
@@ -331,30 +344,34 @@ export default function ConsultingMetricsForm() {
           consultor: consultorName,
           porte: normalizedSize,
           status: status,
+          valor_consultoria: consultingValue,
+          duration: duration,
+          isBonificada: isBonificada,
+          avaliacaoEstrelas: avaliacaoEstrelas,
         },
       })
 
       const result = await createConsultingMetric({
         date: new Date().toISOString().split("T")[0], // Data atual
         consultor: consultorName,
-        client: client,
+        client: client.trim(),
         project_type: projectType,
         status: status,
         size: normalizedSize, // Usar valor normalizado
-        size_detail: sizeDetail || "",
+        size_detail: sizeDetail.trim() || "",
         start_date: formattedStartDate,
         end_date: formattedEndDate,
-        duration: duration,
-        consulting_value: consultingValue,
-        bonus_8_percent: bonus8Percent,
-        bonus_12_percent: bonus12Percent,
+        duration: duration || 0,
+        consulting_value: consultingValue || 0,
+        bonus_8_percent: bonus8Percent || 0,
+        bonus_12_percent: bonus12Percent || 0,
         is_bonificada: isBonificada,
         // Campos de avaliação se status for concluído
         avaliacao_estrelas: status === "concluido" ? avaliacaoEstrelas : undefined,
-        nota_consultoria: status === "concluido" ? notaConsultoria : undefined,
+        nota_consultoria: status === "concluido" ? notaConsultoria.trim() : undefined,
         valor_comissao: status === "concluido" ? valorComissao : undefined,
         percentual_comissao: status === "concluido" ? percentualComissao : undefined,
-        data_finalizacao: status === "concluido" ? new Date().toISOString().split("T")[0] : undefined,
+        data_finalizacao: status === "concluido" ? formattedEndDate : undefined,
         prazo_atingido: status === "concluido" ? projectInfo.isWithinLimit : undefined,
       })
 
@@ -382,12 +399,19 @@ export default function ConsultingMetricsForm() {
       if (error instanceof Error) {
         if (error.message.includes("tipo_check") || error.message.includes("check constraint")) {
           errorMessage = `❌ Erro de restrição no banco de dados. 
-          
-🔧 Execute os scripts SQL na seguinte ordem:
-1. debug-tipo-constraint.sql (para ver o problema)
-2. fix-tipo-constraint.sql (para corrigir)
+    
+🔧 Verifique se o tipo "${projectType}" é aceito no banco.
+Valores válidos: Consultoria, Upsell
 
-Valor enviado para tipo: "${projectType}"`
+Dados enviados:
+- Tipo: "${projectType}"
+- Status: "${status}"  
+- Bonificada: ${isBonificada}
+- Valor: R$ ${consultingValue}`
+        } else if (error.message.includes("avaliacao") || error.message.includes("estrelas")) {
+          errorMessage = `❌ Erro na avaliação. Verifique se todos os campos de avaliação estão preenchidos para status "concluido".`
+        } else if (error.message.includes("invalid input syntax for type integer")) {
+          errorMessage = `❌ Erro de tipo de dados: Um campo numérico recebeu um valor inválido. Verifique se todos os números estão corretos.`
         } else {
           errorMessage = error.message
         }
@@ -461,6 +485,7 @@ Valor enviado para tipo: "${projectType}"`
                   value={client}
                   onChange={(e) => setClient(e.target.value)}
                   className={errors.client ? "border-red-500" : ""}
+                  placeholder="Nome do cliente"
                 />
                 {errors.client && <p className="text-sm text-red-500">{errors.client}</p>}
               </div>
@@ -738,12 +763,14 @@ Valor enviado para tipo: "${projectType}"`
                   type="number"
                   min="0"
                   step="0.01"
-                  value={consultingValue}
+                  value={consultingValue || ""}
                   onChange={(e) => setConsultingValue(Number.parseFloat(e.target.value) || 0)}
                   disabled={isBonificada}
-                  className={isBonificada ? "bg-gray-100" : ""}
+                  className={cn(isBonificada ? "bg-gray-100" : "", errors.consultingValue ? "border-red-500" : "")}
+                  placeholder="0.00"
                 />
                 {isBonificada && <p className="text-xs text-blue-600">💡 Valor fixo para consultorias bonificadas</p>}
+                {errors.consultingValue && <p className="text-sm text-red-500">{errors.consultingValue}</p>}
               </div>
 
               <div className="space-y-2">
