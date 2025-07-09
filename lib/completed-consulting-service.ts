@@ -16,7 +16,7 @@ const generateMockCompletedProjects = (): ConsultingProject[] => [
   {
     id: "mock-1",
     cliente: "Empresa Alpha Ltda",
-    tipo: "consultoria",
+    tipo: "Consultoria",
     porte: "enterprise",
     consultor: "João Silva",
     data_inicio: "2024-01-15",
@@ -29,11 +29,12 @@ const generateMockCompletedProjects = (): ConsultingProject[] => [
     avaliacao_estrelas: 5,
     prazo_atingido: true,
     status: "concluido",
+    bonificada: false,
   },
   {
     id: "mock-2",
     cliente: "Tech Solutions Inc",
-    tipo: "upsell",
+    tipo: "Upsell",
     porte: "pro",
     consultor: "Maria Santos",
     data_inicio: "2024-02-01",
@@ -46,11 +47,12 @@ const generateMockCompletedProjects = (): ConsultingProject[] => [
     avaliacao_estrelas: 4,
     prazo_atingido: false,
     status: "concluido",
+    bonificada: true,
   },
   {
     id: "mock-3",
     cliente: "Startup Inovadora",
-    tipo: "consultoria",
+    tipo: "Consultoria",
     porte: "starter",
     consultor: "Carlos Mendes",
     data_inicio: "2024-03-01",
@@ -63,57 +65,7 @@ const generateMockCompletedProjects = (): ConsultingProject[] => [
     avaliacao_estrelas: 5,
     prazo_atingido: true,
     status: "concluido",
-  },
-  {
-    id: "mock-4",
-    cliente: "Corporação Global",
-    tipo: "consultoria",
-    porte: "enterprise",
-    consultor: "Ana Costa",
-    data_inicio: "2024-04-01",
-    data_termino: "2024-06-15",
-    data_finalizacao: "2024-06-20",
-    tempo_dias: 75,
-    valor_consultoria: 32000,
-    valor_comissao: 3840,
-    percentual_comissao: 12,
-    avaliacao_estrelas: 3,
-    prazo_atingido: false,
-    status: "concluido",
-  },
-  {
-    id: "mock-5",
-    cliente: "Empresa Beta",
-    tipo: "upsell",
-    porte: "basic",
-    consultor: "Pedro Oliveira",
-    data_inicio: "2024-05-10",
-    data_termino: "2024-05-25",
-    data_finalizacao: "2024-05-24",
-    tempo_dias: 15,
-    valor_consultoria: 6000,
-    valor_comissao: 720,
-    percentual_comissao: 12,
-    avaliacao_estrelas: 4,
-    prazo_atingido: true,
-    status: "concluido",
-  },
-  {
-    id: "mock-6",
-    cliente: "Indústria XYZ",
-    tipo: "consultoria",
-    porte: "pro",
-    consultor: "Luciana Fernandes",
-    data_inicio: "2024-06-01",
-    data_termino: "2024-07-30",
-    data_finalizacao: "2024-08-05",
-    tempo_dias: 59,
-    valor_consultoria: 22000,
-    valor_comissao: 2640,
-    percentual_comissao: 12,
-    avaliacao_estrelas: 5,
-    prazo_atingido: false,
-    status: "concluido",
+    bonificada: false,
   },
 ]
 
@@ -187,7 +139,45 @@ export async function getCompletedConsultingProjects(filters?: {
     }
 
     console.log(`✅ Produção: ${data?.length || 0} consultorias concluídas encontradas`)
-    return (data as ConsultingProject[]) || []
+
+    // Log detalhado dos dados retornados
+    if (data && data.length > 0) {
+      console.log(
+        "📊 Primeiros projetos encontrados:",
+        data.slice(0, 3).map((p) => ({
+          id: p.id,
+          cliente: p.cliente,
+          tipo: p.tipo,
+          consultor: p.consultor,
+          status: p.status,
+        })),
+      )
+    }
+
+    // Mapear os dados para o formato esperado
+    const mappedData = (data || []).map((item: any) => ({
+      id: item.id,
+      cliente: item.cliente || item.client,
+      tipo: item.tipo || item.project_type,
+      porte: item.porte || item.size,
+      consultor: item.consultor || item.member_id,
+      data_inicio: item.data_inicio || item.start_date,
+      data_termino: item.data_termino || item.end_date,
+      data_finalizacao: item.data_finalizacao || item.closing_date,
+      tempo_dias: item.tempo_dias || item.duration,
+      valor_consultoria: item.valor_consultoria || item.consulting_value,
+      valor_comissao: item.valor_comissao || item.bonus_8_percent,
+      percentual_comissao: item.percentual_comissao || 12,
+      avaliacao_estrelas: item.avaliacao_estrelas || 0,
+      prazo_atingido: item.prazo_atingido,
+      status: item.status,
+      bonificada: item.bonificada || item.is_bonificada || false,
+      assinatura_fechamento: item.assinatura_fechamento || false,
+      dias_pausados: item.dias_pausados || 0,
+    })) as ConsultingProject[]
+
+    console.log("🔄 Dados mapeados:", mappedData.slice(0, 2))
+    return mappedData
   } catch (error) {
     console.error("❌ Erro em getCompletedConsultingProjects:", error)
     // Em caso de erro, retornar dados mockados como fallback
@@ -221,11 +211,9 @@ export async function getCompletedConsultingStats(filters?: {
 
     // Calcular estatísticas
     const completedProjects = projects.length
-    // Usar 'valor_consultoria' conforme a estrutura do banco de dados
     const totalRevenue = projects.reduce((sum, project) => sum + (project.valor_consultoria || 0), 0)
 
     const projectsWithRating = projects.filter(
-      // Usar 'avaliacao_estrelas' conforme a estrutura do banco de dados
       (p) => p.avaliacao_estrelas !== null && p.avaliacao_estrelas !== undefined && p.avaliacao_estrelas > 0,
     )
     const averageRating =
@@ -233,19 +221,13 @@ export async function getCompletedConsultingStats(filters?: {
         ? projectsWithRating.reduce((sum, p) => sum + (p.avaliacao_estrelas || 0), 0) / projectsWithRating.length
         : 0
 
-    const projectsWithDuration = projects.filter(
-      // Usar 'tempo_dias' conforme a estrutura do banco de dados
-      (p) => p.tempo_dias && p.tempo_dias > 0,
-    )
+    const projectsWithDuration = projects.filter((p) => p.tempo_dias && p.tempo_dias > 0)
     const averageProjectDuration =
       projectsWithDuration.length > 0
         ? projectsWithDuration.reduce((sum, p) => sum + (p.tempo_dias || 0), 0) / projectsWithDuration.length
         : 0
 
-    const projectsWithDeadlineInfo = projects.filter(
-      // Usar 'prazo_atingido' conforme a estrutura do banco de dados
-      (p) => p.prazo_atingido !== null && p.prazo_atingido !== undefined,
-    )
+    const projectsWithDeadlineInfo = projects.filter((p) => p.prazo_atingido !== null && p.prazo_atingido !== undefined)
     const deadlineComplianceRate =
       projectsWithDeadlineInfo.length > 0
         ? (projectsWithDeadlineInfo.filter((p) => p.prazo_atingido === true).length / projectsWithDeadlineInfo.length) *
@@ -253,8 +235,8 @@ export async function getCompletedConsultingStats(filters?: {
         : 0
 
     const stats = {
-      totalProjects: completedProjects, // Para consultorias concluídas, total = concluídas
-      activeProjects: 0, // Não relevante para consultorias concluídas
+      totalProjects: completedProjects,
+      activeProjects: 0,
       completedProjects,
       averageRating,
       totalRevenue,
@@ -262,10 +244,6 @@ export async function getCompletedConsultingStats(filters?: {
       deadlineComplianceRate,
     }
 
-    console.log("📊 Projetos encontrados para stats:", projects.length)
-    if (projects.length > 0) {
-      console.log("📊 Primeiro projeto para stats:", projects[0])
-    }
     console.log("📊 Estatísticas calculadas:", stats)
     return stats
   } catch (error) {

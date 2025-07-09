@@ -3,31 +3,47 @@
 import { useState, useEffect } from "react"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
-import { Eye, Edit, Trash2, Star, CheckCircle, XCircle, Clock } from "lucide-react"
+import { Eye, Edit, Star, CheckCircle, XCircle, Clock } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { toast } from "@/components/ui/use-toast"
-import { getCompletedConsultingProjects, deleteConsultingProject } from "@/lib/consulting-service"
-import type { ConsultingProject } from "@/lib/consulting-service"
+import { getCompletedConsultingProjects } from "@/lib/completed-consulting-service"
+import type { ConsultingProject } from "@/lib/types"
 
-export function CompletedConsultingTable() {
+interface CompletedConsultingTableProps {
+  projects?: ConsultingProject[]
+  isLoading?: boolean
+}
+
+export function CompletedConsultingTable({
+  projects: externalProjects,
+  isLoading: externalLoading,
+}: CompletedConsultingTableProps) {
   const [projects, setProjects] = useState<ConsultingProject[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    loadProjects()
-  }, [])
+    if (externalProjects) {
+      console.log("📊 Usando projetos externos:", externalProjects)
+      setProjects(externalProjects)
+      setIsLoading(externalLoading || false)
+    } else {
+      loadProjects()
+    }
+  }, [externalProjects, externalLoading])
 
   const loadProjects = async () => {
     try {
       setIsLoading(true)
+      console.log("🔄 Carregando projetos concluídos...")
       const data = await getCompletedConsultingProjects()
+      console.log("✅ Projetos carregados:", data)
       setProjects(data)
     } catch (error) {
-      console.error("Erro ao carregar projetos concluídos:", error)
+      console.error("❌ Erro ao carregar projetos concluídos:", error)
       toast({
         title: "Erro",
         description: "Não foi possível carregar os projetos concluídos.",
@@ -35,32 +51,6 @@ export function CompletedConsultingTable() {
       })
     } finally {
       setIsLoading(false)
-    }
-  }
-
-  const handleDelete = async (id: string) => {
-    if (!confirm("Tem certeza que deseja excluir este projeto?")) {
-      return
-    }
-
-    try {
-      const result = await deleteConsultingProject(id)
-      if (result.success) {
-        toast({
-          title: "Sucesso",
-          description: "Projeto excluído com sucesso.",
-        })
-        loadProjects() // Recarregar a lista
-      } else {
-        throw new Error(result.error || "Erro ao excluir projeto")
-      }
-    } catch (error) {
-      console.error("Erro ao excluir projeto:", error)
-      toast({
-        title: "Erro",
-        description: "Não foi possível excluir o projeto.",
-        variant: "destructive",
-      })
     }
   }
 
@@ -72,15 +62,33 @@ export function CompletedConsultingTable() {
   }
 
   const getStatusBadge = (status: string) => {
-    switch (status) {
+    switch (status?.toLowerCase()) {
       case "concluido":
+      case "finalizado":
         return <Badge className="bg-green-100 text-green-800">Concluído</Badge>
       case "em_andamento":
         return <Badge className="bg-blue-100 text-blue-800">Em Andamento</Badge>
       case "cancelado":
         return <Badge className="bg-red-100 text-red-800">Cancelado</Badge>
       default:
-        return <Badge variant="secondary">{status}</Badge>
+        return <Badge variant="secondary">{status || "N/A"}</Badge>
+    }
+  }
+
+  const getTipoBadge = (tipo: string) => {
+    console.log("🏷️ Renderizando tipo:", tipo)
+
+    // Normalizar o tipo para comparação
+    const tipoNormalizado = tipo?.toLowerCase().trim()
+
+    switch (tipoNormalizado) {
+      case "consultoria":
+        return <Badge className="bg-blue-100 text-blue-800">Consultoria</Badge>
+      case "upsell":
+        return <Badge className="bg-purple-100 text-purple-800">Upsell</Badge>
+      default:
+        // Mostrar o valor original se não reconhecer
+        return <Badge variant="outline">{tipo || "N/A"}</Badge>
     }
   }
 
@@ -92,14 +100,17 @@ export function CompletedConsultingTable() {
       enterprise: "bg-orange-100 text-orange-800",
     }
 
-    return (
-      <Badge className={porteColors[porte as keyof typeof porteColors] || "bg-gray-100 text-gray-800"}>
-        {porte.charAt(0).toUpperCase() + porte.slice(1)}
-      </Badge>
-    )
+    const porteNormalizado = porte?.toLowerCase()
+    const colorClass = porteColors[porteNormalizado as keyof typeof porteColors] || "bg-gray-100 text-gray-800"
+
+    return <Badge className={colorClass}>{porte?.charAt(0).toUpperCase() + porte?.slice(1) || "N/A"}</Badge>
   }
 
   const renderStars = (rating: number) => {
+    if (!rating || rating === 0) {
+      return <span className="text-muted-foreground text-sm">Não avaliado</span>
+    }
+
     return (
       <div className="flex items-center gap-1">
         {[1, 2, 3, 4, 5].map((star) => (
@@ -111,12 +122,24 @@ export function CompletedConsultingTable() {
   }
 
   const getPrazoIcon = (prazoAtingido: boolean | null) => {
-    if (prazoAtingido === null) return <Clock className="h-4 w-4 text-gray-400" />
+    if (prazoAtingido === null || prazoAtingido === undefined) {
+      return <Clock className="h-4 w-4 text-gray-400" />
+    }
     return prazoAtingido ? (
       <CheckCircle className="h-4 w-4 text-green-600" />
     ) : (
       <XCircle className="h-4 w-4 text-red-600" />
     )
+  }
+
+  const formatDate = (dateString: string) => {
+    if (!dateString) return "N/A"
+    try {
+      return format(new Date(dateString), "dd/MM/yyyy", { locale: ptBR })
+    } catch (error) {
+      console.error("Erro ao formatar data:", dateString, error)
+      return dateString
+    }
   }
 
   if (isLoading) {
@@ -171,88 +194,79 @@ export function CompletedConsultingTable() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {projects.map((project) => (
-                  <TableRow key={project.id}>
-                    <TableCell className="font-medium">{project.cliente}</TableCell>
-                    <TableCell>{project.consultor}</TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{project.tipo === "consultoria" ? "Consultoria" : "Upsell"}</Badge>
-                    </TableCell>
-                    <TableCell>{getPorteBadge(project.porte)}</TableCell>
-                    <TableCell>
-                      <div className="text-sm">
-                        <div>{format(new Date(project.data_inicio), "dd/MM/yyyy", { locale: ptBR })}</div>
-                        <div className="text-muted-foreground">
-                          até {format(new Date(project.data_termino), "dd/MM/yyyy", { locale: ptBR })}
+                {projects.map((project) => {
+                  console.log("🔍 Renderizando projeto:", {
+                    id: project.id,
+                    cliente: project.cliente,
+                    tipo: project.tipo,
+                    consultor: project.consultor,
+                  })
+
+                  return (
+                    <TableRow key={project.id}>
+                      <TableCell className="font-medium">{project.cliente || "N/A"}</TableCell>
+                      <TableCell>{project.consultor || "Não atribuído"}</TableCell>
+                      <TableCell>{getTipoBadge(project.tipo)}</TableCell>
+                      <TableCell>{getPorteBadge(project.porte)}</TableCell>
+                      <TableCell>
+                        <div className="text-sm">
+                          <div>{formatDate(project.data_inicio)}</div>
+                          <div className="text-muted-foreground">até {formatDate(project.data_termino)}</div>
                         </div>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <span className="font-medium">{project.tempo_dias || 0} dias</span>
-                    </TableCell>
-                    <TableCell>
-                      <div className="text-sm">
-                        <div className="font-medium">{formatCurrency(project.valor_consultoria)}</div>
-                        {project.bonificada && <div className="text-xs text-blue-600">Bonificada</div>}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      {project.avaliacao_estrelas ? (
-                        renderStars(project.avaliacao_estrelas)
-                      ) : (
-                        <span className="text-muted-foreground text-sm">Não avaliado</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        {getPrazoIcon(project.prazo_atingido)}
-                        <span className="text-sm">
-                          {project.prazo_atingido === null ? "N/A" : project.prazo_atingido ? "Atingido" : "Excedido"}
-                        </span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="text-sm">
-                        <div className="font-medium">{formatCurrency(project.valor_comissao || 0)}</div>
-                        <div className="text-muted-foreground">{project.percentual_comissao || 0}%</div>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      {project.bonificada ? (
-                        <Badge className="bg-blue-100 text-blue-800">Sim</Badge>
-                      ) : (
-                        <Badge variant="outline">Não</Badge>
-                      )}
-                    </TableCell>
-                    <TableCell>{getStatusBadge(project.status || "concluido")}</TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => window.open(`/consultoria/projetos/${project.id}`, "_blank")}
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => window.open(`/consultoria/projetos/editar/${project.id}`, "_blank")}
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDelete(project.id)}
-                          className="text-red-600 hover:text-red-700"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                      </TableCell>
+                      <TableCell>
+                        <span className="font-medium">{project.tempo_dias || 0} dias</span>
+                      </TableCell>
+                      <TableCell>
+                        <div className="text-sm">
+                          <div className="font-medium">{formatCurrency(project.valor_consultoria || 0)}</div>
+                          {project.bonificada && <div className="text-xs text-blue-600">Bonificada</div>}
+                        </div>
+                      </TableCell>
+                      <TableCell>{renderStars(project.avaliacao_estrelas || 0)}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          {getPrazoIcon(project.prazo_atingido)}
+                          <span className="text-sm">
+                            {project.prazo_atingido === null ? "N/A" : project.prazo_atingido ? "Atingido" : "Excedido"}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="text-sm">
+                          <div className="font-medium">{formatCurrency(project.valor_comissao || 0)}</div>
+                          <div className="text-muted-foreground">{project.percentual_comissao || 0}%</div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {project.bonificada ? (
+                          <Badge className="bg-blue-100 text-blue-800">Sim</Badge>
+                        ) : (
+                          <Badge variant="outline">Não</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell>{getStatusBadge(project.status || "concluido")}</TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => window.open(`/consultoria/projetos/${project.id}`, "_blank")}
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => window.open(`/consultoria/projetos/editar/${project.id}`, "_blank")}
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
               </TableBody>
             </Table>
           </div>
