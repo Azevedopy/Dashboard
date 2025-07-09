@@ -329,33 +329,37 @@ export default function ConsultingMetricsForm() {
         throw new Error("Consultor não encontrado")
       }
 
-      console.log("📝 Dados do formulário antes do envio:", {
-        consultant,
-        consultorName,
-        memberId,
-        consultants,
+      // Log detalhado dos dados antes do envio
+      console.log("📝 Dados do formulário ANTES do envio:", {
+        projectType: projectType,
+        projectTypeType: typeof projectType,
+        client: client,
+        consultorName: consultorName,
+        status: status,
         size: normalizedSize,
-        projectType,
-        porteValido: validPortes.includes(normalizedSize),
-        tipoValido: ["Consultoria", "Upsell"].includes(projectType),
-        dadosCompletos: {
-          cliente: client,
-          tipo: projectType,
-          consultor: consultorName,
-          porte: normalizedSize,
-          status: status,
-          valor_consultoria: consultingValue,
-          duration: duration,
-          isBonificada: isBonificada,
-          avaliacaoEstrelas: avaliacaoEstrelas,
-        },
+        isBonificada: isBonificada,
+        avaliacaoEstrelas: avaliacaoEstrelas,
+        formattedStartDate: formattedStartDate,
+        formattedEndDate: formattedEndDate,
+        duration: duration,
+        consultingValue: consultingValue,
+        bonus8Percent: bonus8Percent,
+        bonus12Percent: bonus12Percent,
+        valorComissao: valorComissao,
+        percentualComissao: percentualComissao,
       })
+
+      // Verificar se o tipo está correto
+      const validTipos = ["Consultoria", "Upsell"]
+      if (!validTipos.includes(projectType)) {
+        throw new Error(`Tipo selecionado inválido: "${projectType}". Valores aceitos: ${validTipos.join(", ")}`)
+      }
 
       const result = await createConsultingMetric({
         date: new Date().toISOString().split("T")[0], // Data atual
         consultor: consultorName,
         client: client.trim(),
-        project_type: projectType,
+        project_type: projectType, // Manter exatamente como selecionado
         status: status,
         size: normalizedSize, // Usar valor normalizado
         size_detail: sizeDetail.trim() || "",
@@ -375,6 +379,8 @@ export default function ConsultingMetricsForm() {
         prazo_atingido: status === "concluido" ? projectInfo.isWithinLimit : undefined,
       })
 
+      console.log("📤 Resultado da criação:", result)
+
       if (result.success) {
         toast({
           title: "Projeto cadastrado com sucesso",
@@ -391,7 +397,7 @@ export default function ConsultingMetricsForm() {
         throw new Error(result.error || "Erro ao cadastrar projeto")
       }
     } catch (error) {
-      console.error("Erro ao cadastrar projeto:", error)
+      console.error("❌ Erro ao cadastrar projeto:", error)
 
       // Melhor tratamento de erro para identificar o problema específico
       let errorMessage = "Ocorreu um erro ao tentar cadastrar o projeto"
@@ -399,7 +405,7 @@ export default function ConsultingMetricsForm() {
       if (error instanceof Error) {
         if (error.message.includes("tipo_check") || error.message.includes("check constraint")) {
           errorMessage = `❌ Erro de restrição no banco de dados. 
-    
+
 🔧 Verifique se o tipo "${projectType}" é aceito no banco.
 Valores válidos: Consultoria, Upsell
 

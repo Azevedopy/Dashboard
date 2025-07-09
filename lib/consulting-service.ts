@@ -491,11 +491,14 @@ export async function createConsultingMetric(metricData: {
   try {
     console.log("🔄 Criando métrica de consultoria:", metricData)
 
+    // Normalizar o tipo corretamente - manter capitalização original
+    const normalizedType = metricData.project_type.trim()
+
     // Validar e limpar dados antes de enviar para o banco
     const cleanedData = {
       consultor: parseStringValue(metricData.consultor),
       cliente: parseStringValue(metricData.client),
-      tipo: parseStringValue(metricData.project_type),
+      tipo: normalizedType, // Usar tipo normalizado sem conversão para lowercase
       status: parseStringValue(metricData.status),
       porte: parseStringValue(metricData.size),
       data_inicio: parseStringValue(metricData.start_date),
@@ -534,9 +537,14 @@ export async function createConsultingMetric(metricData: {
       throw new Error(`Campos obrigatórios faltando: ${missingFields.join(", ")}`)
     }
 
-    // Validar valores específicos
+    // Validar valores específicos - manter capitalização correta
     const validTipos = ["Consultoria", "Upsell"]
     if (!validTipos.includes(cleanedData.tipo!)) {
+      console.error("❌ Tipo inválido recebido:", {
+        tipoRecebido: cleanedData.tipo,
+        tipoOriginal: metricData.project_type,
+        tiposValidos: validTipos,
+      })
       throw new Error(`Tipo inválido: ${cleanedData.tipo}. Valores aceitos: ${validTipos.join(", ")}`)
     }
 
@@ -556,6 +564,13 @@ export async function createConsultingMetric(metricData: {
         throw new Error("Avaliação por estrelas é obrigatória para projetos concluídos (1-5)")
       }
     }
+
+    console.log("✅ Dados validados, inserindo no banco:", {
+      tipo: cleanedData.tipo,
+      cliente: cleanedData.cliente,
+      consultor: cleanedData.consultor,
+      status: cleanedData.status,
+    })
 
     const { data, error } = await supabase.from("metrics_consultoria").insert([cleanedData]).select().single()
 
