@@ -80,12 +80,14 @@ function generateMockMetrics(days = 30) {
 }
 
 // Members
-export async function getMembers(): Promise<Member[]> {
+export async function getMembers(serviceType?: string): Promise<Member[]> {
   try {
+    console.log(`🔍 Buscando membros${serviceType ? ` com service_type=${serviceType}` : ""}`)
+
     // Verificar se estamos em ambiente de preview
     if (isPreviewEnvironment()) {
       console.log("👥 Ambiente de preview - usando membros mockados")
-      return [
+      const mockMembers = [
         {
           id: "1",
           name: "Ana Silva",
@@ -110,8 +112,8 @@ export async function getMembers(): Promise<Member[]> {
           id: "3",
           name: "Maria Oliveira",
           email: "maria@empresa.com",
-          service_type: "suporte",
-          role: "Atendente",
+          service_type: "consultoria",
+          role: "Consultor",
           joined_at: "2024-01-01",
           created_at: "2024-01-01",
           access_type: "member",
@@ -120,13 +122,14 @@ export async function getMembers(): Promise<Member[]> {
           id: "4",
           name: "João Costa",
           email: "joao@empresa.com",
-          service_type: "suporte",
-          role: "Atendente",
+          service_type: "genier",
+          role: "Especialista",
           joined_at: "2024-01-01",
           created_at: "2024-01-01",
           access_type: "member",
         },
       ]
+      return serviceType ? mockMembers.filter((m) => m.service_type === serviceType) : mockMembers
     }
 
     const supabase = getSupabase()
@@ -135,7 +138,13 @@ export async function getMembers(): Promise<Member[]> {
       return []
     }
 
-    const { data, error } = await supabase.from("members").select("*").order("name")
+    let query = supabase.from("members").select("*")
+
+    if (serviceType) {
+      query = query.eq("service_type", serviceType)
+    }
+
+    const { data, error } = await query.order("name", { ascending: true })
 
     if (error) {
       console.error("❌ Erro ao buscar membros:", error)
@@ -152,6 +161,8 @@ export async function getMembers(): Promise<Member[]> {
 
 export async function getMemberById(id: string): Promise<Member | null> {
   try {
+    console.log(`🔍 Buscando membro com id=${id}`)
+
     if (isPreviewEnvironment()) {
       const mockMembers = await getMembers()
       return mockMembers.find((m) => m.id === id) || null
@@ -165,13 +176,14 @@ export async function getMemberById(id: string): Promise<Member | null> {
     const { data, error } = await supabase.from("members").select("*").eq("id", id).single()
 
     if (error) {
-      console.error("Error fetching member:", error)
+      console.error("❌ Erro ao buscar membro:", error)
       return null
     }
 
+    console.log(`✅ Membro encontrado: ${data?.name}`)
     return data
   } catch (error) {
-    console.error("Unexpected error fetching member:", error)
+    console.error("❌ Erro inesperado ao buscar membro:", error)
     return null
   }
 }
@@ -196,30 +208,55 @@ export async function createMember(member: Omit<Member, "id" | "joined_at" | "cr
     const { data, error } = await supabase.from("members").insert([member]).select().single()
 
     if (error) {
-      console.error("Error creating member:", error)
+      console.error("❌ Erro ao criar membro:", error)
       return null
     }
 
+    console.log(`✅ Membro criado: ${data?.name}`)
     return data
   } catch (error) {
-    console.error("Unexpected error creating member:", error)
+    console.error("❌ Erro inesperado ao criar membro:", error)
     return null
   }
 }
 
 // Metrics
-export async function getMetrics(startDate?: string, endDate?: string, serviceType?: string): Promise<MetricEntry[]> {
+export async function getMetrics(
+  startDate?: string,
+  endDate?: string,
+  memberIds?: string[],
+  serviceType?: string,
+): Promise<MetricEntry[]> {
   try {
     console.log(`=== INICIANDO BUSCA DE MÉTRICAS ===`)
-    console.log(
-      `Parâmetros: startDate=${startDate || "TODOS"}, endDate=${endDate || "TODOS"}, serviceType=${serviceType || "TODOS"}`,
-    )
+    console.log(`Parâmetros:`, {
+      startDate: startDate || "TODOS",
+      endDate: endDate || "TODOS",
+      memberIds: memberIds || "TODOS",
+      serviceType: serviceType || "TODOS",
+    })
 
     // APENAS usar dados mockados em ambiente de preview
     if (isPreviewEnvironment()) {
       console.log("🔄 Ambiente de preview - retornando dados mockados")
       await new Promise((resolve) => setTimeout(resolve, 500))
-      return generateMockMetrics(30)
+      let mockData = generateMockMetrics(30)
+
+      // Aplicar filtros aos dados mockados
+      if (startDate) {
+        mockData = mockData.filter((m) => m.date >= startDate)
+      }
+      if (endDate) {
+        mockData = mockData.filter((m) => m.date <= endDate)
+      }
+      if (memberIds && memberIds.length > 0) {
+        mockData = mockData.filter((m) => memberIds.includes(m.member_id))
+      }
+      if (serviceType) {
+        mockData = mockData.filter((m) => m.service_type === serviceType)
+      }
+
+      return mockData
     }
 
     const supabase = getSupabase()
@@ -229,23 +266,63 @@ export async function getMetrics(startDate?: string, endDate?: string, serviceTy
       return []
     }
 
+    // Primeiro, buscar todos os membros para fazer o mapeamento
+    console.log("🔄 Buscando membros para mapeamento...")
+    const { data: allMembers, error: membersError } = await supabase.from("members").select("id, name, service_type")
+
+    if (membersError) {
+      console.error("❌ Erro ao buscar membros:", membersError)
+      return []
+    }
+
+    console.log(`✅ ${allMembers?.length || 0} membros encontrados`)
+
+    // Criar mapa de membros
+    const memberMap = new Map<string, { name: string; service_type: string }>()
+    allMembers?.forEach((member) => {
+      memberMap.set(member.id, {
+        name: member.name,
+        service_type: member.service_type || "suporte",
+      })
+    })
+
+    // Construir query para métricas
     let query = supabase.from("metrics").select("*")
 
+    // Aplicar filtros de data
     if (startDate) {
       query = query.gte("date", startDate)
-      console.log(`✅ Aplicando filtro: date >= ${startDate}`)
+      console.log(`✅ Filtro aplicado: date >= ${startDate}`)
     }
 
     if (endDate) {
       query = query.lte("date", endDate)
-      console.log(`✅ Aplicando filtro: date <= ${endDate}`)
+      console.log(`✅ Filtro aplicado: date <= ${endDate}`)
     }
 
+    // Aplicar filtro de membros
+    if (memberIds && memberIds.length > 0) {
+      query = query.in("member_id", memberIds)
+      console.log(`✅ Filtro aplicado: member_id IN [${memberIds.join(", ")}]`)
+    }
+
+    // Aplicar filtro de service_type
     if (serviceType) {
-      query = query.eq("service_type", serviceType)
-      console.log(`✅ Aplicando filtro: service_type = ${serviceType}`)
+      // Primeiro filtrar os membros pelo service_type
+      const filteredMemberIds = Array.from(memberMap.entries())
+        .filter(([_, member]) => member.service_type === serviceType)
+        .map(([id, _]) => id)
+
+      if (filteredMemberIds.length > 0) {
+        query = query.in("member_id", filteredMemberIds)
+        console.log(`✅ Filtro aplicado: service_type = ${serviceType} (${filteredMemberIds.length} membros)`)
+      } else {
+        console.log(`⚠️ Nenhum membro encontrado com service_type = ${serviceType}`)
+        return []
+      }
     }
 
+    // Ordenar por data
     query = query.order("date", { ascending: false })
 
     console.log("🔄 Executando consulta no Supabase...")
@@ -264,32 +341,33 @@ export async function getMetrics(startDate?: string, endDate?: string, serviceTy
 
     console.log(`✅ ${metricsData.length} métricas encontradas no banco`)
 
-    // Buscar nomes dos membros
-    const { data: membersData } = await supabase.from("members").select("id, name")
-
-    const memberMap = new Map()
-    membersData?.forEach((member) => {
-      memberMap.set(member.id, member.name)
-    })
-
+    // Processar dados e adicionar informações dos membros
     const processedData = metricsData.map((metric) => {
-      const memberName = memberMap.get(metric.member_id) || "Desconhecido"
+      const memberInfo = memberMap.get(metric.member_id)
+      const memberName = memberInfo?.name || "Desconhecido"
+      const memberServiceType = memberInfo?.service_type || metric.service_type || "suporte"
 
       return {
-        ...metric,
+        id: metric.id,
+        member_id: metric.member_id,
         member: memberName,
-        open_tickets: Number(metric.open_tickets || 0),
-        resolved_tickets: Number(metric.resolved_tickets || 0),
-        average_response_time: Number(metric.average_response_time || 0),
+        date: metric.date,
         resolution_rate: Number(metric.resolution_rate || 0),
+        average_response_time: Number(metric.average_response_time || 0),
         csat_score: Number(metric.csat_score || 0),
         evaluated_percentage: Number(metric.evaluated_percentage || 0),
+        open_tickets: Number(metric.open_tickets || 0),
+        resolved_tickets: Number(metric.resolved_tickets || 0),
+        service_type: memberServiceType,
+        created_at: metric.created_at,
       }
     })
 
     const result = snakeToCamel(processedData)
 
     console.log(`✅ Retornando ${result.length} registros processados`)
+    console.log(`📊 Exemplo do primeiro registro:`, result[0])
+
     return result
   } catch (error) {
     console.error("❌ Erro inesperado ao buscar métricas:", error)
@@ -299,99 +377,42 @@ export async function getMetrics(startDate?: string, endDate?: string, serviceTy
 
 export async function getGenierMetrics(startDate?: string, endDate?: string): Promise<MetricEntry[]> {
   try {
+    console.log(`🔍 Buscando métricas Genier`)
+
     if (isPreviewEnvironment()) {
       console.log("🔄 Ambiente de preview - retornando dados mockados para Genier")
-      return generateMockMetrics(30).filter((m) => m.member.includes("Silva"))
+      return generateMockMetrics(30).filter((m) => m.service_type === "genier")
     }
 
-    const supabase = getSupabase()
-    if (!supabase) {
-      return []
-    }
-
-    const { data: members, error: membersError } = await supabase.from("members").select("id").ilike("name", "%genier%")
-
-    if (membersError || !members || members.length === 0) {
-      return []
-    }
-
-    const genierIds = members.map((m) => m.id)
-
-    let query = supabase.from("metrics").select("*").in("member_id", genierIds).order("date", { ascending: false })
-
-    if (startDate) {
-      query = query.gte("date", startDate)
-    }
-
-    if (endDate) {
-      query = query.lte("date", endDate)
-    }
-
-    const { data, error } = await query
-
-    if (error) {
-      console.error("Error fetching Genier metrics:", error)
-      return []
-    }
-
-    const { data: membersData } = await supabase.from("members").select("id, name").in("id", genierIds)
-
-    const memberMap = new Map()
-    membersData?.forEach((member) => {
-      memberMap.set(member.id, member.name)
-    })
-
-    const processedData =
-      data?.map((item) => ({
-        ...item,
-        member: memberMap.get(item.member_id) || "Genier",
-      })) || []
-
-    return snakeToCamel(processedData)
+    // Buscar métricas com service_type = 'genier'
+    return await getMetrics(startDate, endDate, undefined, "genier")
   } catch (error) {
-    console.error("Unexpected error fetching Genier metrics:", error)
+    console.error("❌ Erro inesperado ao buscar métricas Genier:", error)
     return []
   }
 }
 
 export async function getMemberMetrics(memberId: string, startDate?: string, endDate?: string): Promise<MetricEntry[]> {
   try {
+    console.log(`🔍 Buscando métricas do membro ${memberId}`)
+
     if (isPreviewEnvironment()) {
       console.log("🔄 Ambiente de preview - retornando dados mockados para membro")
       return generateMockMetrics(30).filter((m) => m.member_id === memberId)
     }
 
-    const supabase = getSupabase()
-    if (!supabase) {
-      return []
-    }
-
-    let query = supabase.from("metrics").select("*").eq("member_id", memberId).order("date", { ascending: false })
-
-    if (startDate) {
-      query = query.gte("date", startDate)
-    }
-
-    if (endDate) {
-      query = query.lte("date", endDate)
-    }
-
-    const { data, error } = await query
-
-    if (error) {
-      console.error("Error fetching member metrics:", error)
-      return []
-    }
-
-    return snakeToCamel(data || [])
+    // Buscar métricas do membro específico
+    return await getMetrics(startDate, endDate, [memberId])
   } catch (error) {
-    console.error("Unexpected error fetching member metrics:", error)
+    console.error("❌ Erro inesperado ao buscar métricas do membro:", error)
     return []
   }
 }
 
 export async function createMetric(metricData: any): Promise<MetricEntry | null> {
   try {
+    console.log("📝 Criando nova métrica:", metricData)
+
     if (isPreviewEnvironment()) {
       console.log("🔄 Ambiente de preview - simulando criação de métrica")
       return {
@@ -403,39 +424,35 @@ export async function createMetric(metricData: any): Promise<MetricEntry | null>
 
     const supabase = getSupabase()
     if (!supabase) {
+      console.error("❌ Cliente Supabase não disponível")
       return null
     }
 
     const date = metricData.date
-    console.log(`Data a ser salva no banco: ${date}`)
-
-    const resolution_rate = formatDecimal(metricData.resolution_rate || 0)
-    const average_response_time = formatDecimal(metricData.average_response_time || 0)
-    const csat_score = formatDecimal(metricData.csat_score || 0)
-    const evaluated_percentage = formatDecimal(metricData.evaluated_percentage || 0)
+    console.log(`📅 Data a ser salva no banco: ${date}`)
 
     const data = {
       member_id: metricData.member_id,
       date: date,
-      resolution_rate: resolution_rate,
-      average_response_time: average_response_time,
-      csat_score: csat_score,
-      evaluated_percentage: evaluated_percentage,
-      open_tickets: metricData.open_tickets,
-      resolved_tickets: metricData.resolved_tickets,
-      service_type: metricData.service_type,
+      resolution_rate: formatDecimal(Number(metricData.resolution_rate || 0)),
+      average_response_time: formatDecimal(Number(metricData.average_response_time || 0)),
+      csat_score: formatDecimal(Number(metricData.csat_score || 0)),
+      evaluated_percentage: formatDecimal(Number(metricData.evaluated_percentage || 0)),
+      open_tickets: Number(metricData.open_tickets || 0),
+      resolved_tickets: Number(metricData.resolved_tickets || 0),
+      service_type: metricData.service_type || "suporte",
     }
 
-    console.log("Dados formatados para inserção:", data)
+    console.log("💾 Dados formatados para inserção:", data)
 
     const { data: result, error } = await supabase.from("metrics").insert([data]).select().single()
 
     if (error) {
-      console.error("Error creating metric:", error)
+      console.error("❌ Erro ao criar métrica:", error)
       return null
     }
 
-    console.log("Métrica salva com sucesso:", result)
+    console.log("✅ Métrica salva com sucesso:", result)
 
     return {
       ...result,
@@ -448,13 +465,15 @@ export async function createMetric(metricData: any): Promise<MetricEntry | null>
       serviceType: result.service_type,
     }
   } catch (error) {
-    console.error("Unexpected error creating metric:", error)
+    console.error("❌ Erro inesperado ao criar métrica:", error)
     return null
   }
 }
 
 export async function updateMetric(id: string, metricData: any): Promise<MetricEntry | null> {
   try {
+    console.log(`📝 Atualizando métrica ${id}:`, metricData)
+
     if (isPreviewEnvironment()) {
       console.log("🔄 Ambiente de preview - simulando atualização de métrica")
       return {
@@ -466,34 +485,30 @@ export async function updateMetric(id: string, metricData: any): Promise<MetricE
 
     const supabase = getSupabase()
     if (!supabase) {
+      console.error("❌ Cliente Supabase não disponível")
       return null
     }
 
-    const resolution_rate = formatDecimal(metricData.resolution_rate || 0)
-    const average_response_time = formatDecimal(metricData.average_response_time || 0)
-    const csat_score = formatDecimal(metricData.csat_score || 0)
-    const evaluated_percentage = formatDecimal(metricData.evaluated_percentage || 0)
-
     const data = {
-      resolution_rate: resolution_rate,
-      average_response_time: average_response_time,
-      csat_score: csat_score,
-      evaluated_percentage: evaluated_percentage,
-      open_tickets: metricData.open_tickets,
-      resolved_tickets: metricData.resolved_tickets,
-      service_type: metricData.service_type,
+      resolution_rate: formatDecimal(Number(metricData.resolution_rate || 0)),
+      average_response_time: formatDecimal(Number(metricData.average_response_time || 0)),
+      csat_score: formatDecimal(Number(metricData.csat_score || 0)),
+      evaluated_percentage: formatDecimal(Number(metricData.evaluated_percentage || 0)),
+      open_tickets: Number(metricData.open_tickets || 0),
+      resolved_tickets: Number(metricData.resolved_tickets || 0),
+      service_type: metricData.service_type || "suporte",
     }
 
-    console.log("Dados formatados para atualização:", data)
+    console.log("💾 Dados formatados para atualização:", data)
 
     const { data: result, error } = await supabase.from("metrics").update(data).eq("id", id).select().single()
 
     if (error) {
-      console.error("Error updating metric:", error)
+      console.error("❌ Erro ao atualizar métrica:", error)
       return null
     }
 
-    console.log("Métrica atualizada com sucesso:", result)
+    console.log("✅ Métrica atualizada com sucesso:", result)
 
     return {
       ...result,
@@ -506,13 +521,15 @@ export async function updateMetric(id: string, metricData: any): Promise<MetricE
       serviceType: result.service_type,
     }
   } catch (error) {
-    console.error("Unexpected error updating metric:", error)
+    console.error("❌ Erro inesperado ao atualizar métrica:", error)
     return null
   }
 }
 
 export async function deleteMetric(id: string): Promise<boolean> {
   try {
+    console.log(`🗑️ Deletando métrica ${id}`)
+
     if (isPreviewEnvironment()) {
       console.log("🔄 Ambiente de preview - simulando exclusão de métrica")
       return true
@@ -520,29 +537,33 @@ export async function deleteMetric(id: string): Promise<boolean> {
 
     const supabase = getSupabase()
     if (!supabase) {
-      console.error("❌ Supabase client not initialized")
+      console.error("❌ Cliente Supabase não disponível")
       return false
     }
 
     const { error } = await supabase.from("metrics").delete().eq("id", id)
 
     if (error) {
-      console.error("Error deleting metric:", error)
+      console.error("❌ Erro ao deletar métrica:", error)
       return false
     }
 
+    console.log("✅ Métrica deletada com sucesso")
     return true
   } catch (error) {
-    console.error("Unexpected error deleting metric:", error)
+    console.error("❌ Erro inesperado ao deletar métrica:", error)
     return false
   }
 }
 
 export async function getAggregatedMetrics(startDate?: string, endDate?: string): Promise<DailyMetric[]> {
   try {
+    console.log(`📊 Calculando métricas agregadas`)
+
     const metrics = await getMetrics(startDate, endDate)
 
     if (metrics.length === 0) {
+      console.log("⚠️ Sem métricas para agregar")
       return []
     }
 
@@ -573,24 +594,33 @@ export async function getAggregatedMetrics(startDate?: string, endDate?: string)
     })
 
     Object.keys(dailyMetrics).forEach((date) => {
-      dailyMetrics[date].resolution_rate = formatDecimal(dailyMetrics[date].resolution_rate / memberCount)
-      dailyMetrics[date].average_response_time = formatDecimal(dailyMetrics[date].average_response_time / memberCount)
-      dailyMetrics[date].csat_score = formatDecimal(dailyMetrics[date].csat_score / memberCount)
-      dailyMetrics[date].evaluated_percentage = formatDecimal(dailyMetrics[date].evaluated_percentage / memberCount)
+      const metricsForDate = metrics.filter((m) => m.date === date).length
+      dailyMetrics[date].resolution_rate = formatDecimal(dailyMetrics[date].resolution_rate / metricsForDate)
+      dailyMetrics[date].average_response_time = formatDecimal(
+        dailyMetrics[date].average_response_time / metricsForDate,
+      )
+      dailyMetrics[date].csat_score = formatDecimal(dailyMetrics[date].csat_score / metricsForDate)
+      dailyMetrics[date].evaluated_percentage = formatDecimal(dailyMetrics[date].evaluated_percentage / metricsForDate)
     })
 
-    return Object.values(dailyMetrics).sort((a, b) => a.date.localeCompare(b.date))
+    const result = Object.values(dailyMetrics).sort((a, b) => a.date.localeCompare(b.date))
+    console.log(`✅ ${result.length} dias agregados`)
+
+    return result
   } catch (error) {
-    console.error("Unexpected error getting aggregated metrics:", error)
+    console.error("❌ Erro inesperado ao agregar métricas:", error)
     return []
   }
 }
 
 export async function getTopPerformers(): Promise<MemberMetrics[]> {
   try {
+    console.log(`🏆 Buscando top performers`)
+
     const members = await getMembers()
 
     if (members.length === 0) {
+      console.log("⚠️ Nenhum membro encontrado")
       return []
     }
 
@@ -601,6 +631,7 @@ export async function getTopPerformers(): Promise<MemberMetrics[]> {
     const metrics = await getMetrics(startDate)
 
     if (metrics.length === 0) {
+      console.log("⚠️ Nenhuma métrica encontrada")
       return []
     }
 
@@ -619,21 +650,26 @@ export async function getTopPerformers(): Promise<MemberMetrics[]> {
       }
     })
 
-    return Object.values(memberMetrics)
+    const result = Object.values(memberMetrics)
       .filter((item) => item.metrics.length > 0)
       .sort((a, b) => {
         const aAvgCsat = a.metrics.reduce((sum, m) => sum + m.csat_score, 0) / a.metrics.length
         const bAvgCsat = b.metrics.reduce((sum, m) => sum + m.csat_score, 0) / b.metrics.length
         return bAvgCsat - aAvgCsat
       })
+
+    console.log(`✅ ${result.length} performers encontrados`)
+    return result
   } catch (error) {
-    console.error("Unexpected error getting top performers:", error)
+    console.error("❌ Erro inesperado ao buscar top performers:", error)
     return []
   }
 }
 
 export async function uploadMetricsFromCSV(csvData: any[]): Promise<{ success: boolean; message: string }> {
   try {
+    console.log(`📤 Importando ${csvData.length} registros do CSV`)
+
     if (isPreviewEnvironment()) {
       console.log("🔄 Ambiente de preview - simulando upload de CSV")
       return { success: true, message: `${csvData.length} registros importados com sucesso (simulado)` }
@@ -641,7 +677,7 @@ export async function uploadMetricsFromCSV(csvData: any[]): Promise<{ success: b
 
     const supabase = getSupabase()
     if (!supabase) {
-      console.error("❌ Supabase client not initialized")
+      console.error("❌ Cliente Supabase não disponível")
       return { success: false, message: "Cliente Supabase não inicializado" }
     }
 
@@ -658,16 +694,17 @@ export async function uploadMetricsFromCSV(csvData: any[]): Promise<{ success: b
       evaluated_percentage: formatDecimal(Number.parseFloat(row.evaluated_percentage || "0")),
       open_tickets: Number.parseInt(row.open_tickets || "0", 10),
       resolved_tickets: Number.parseInt(row.resolved_tickets || "0", 10),
-      service_type: row.service_type,
+      service_type: row.service_type || "suporte",
     }))
 
     const { error } = await supabase.from("metrics").insert(formattedData)
 
     if (error) throw error
 
+    console.log(`✅ ${formattedData.length} registros importados com sucesso`)
     return { success: true, message: `${formattedData.length} registros importados com sucesso` }
   } catch (error) {
-    console.error("Error uploading metrics:", error)
+    console.error("❌ Erro ao importar métricas:", error)
     return {
       success: false,
       message: error instanceof Error ? error.message : "Erro desconhecido ao importar dados",
