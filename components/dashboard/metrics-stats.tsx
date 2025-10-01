@@ -2,17 +2,14 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
-import { CheckCircle, Clock, Star, BarChart } from "lucide-react"
+import { CheckCircle, Clock, Star, BarChart, AlertCircle } from "lucide-react"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 
 export function MetricsStats({ metrics, isLoading }) {
-  // Verificação para ambiente de preview - sempre mostra dados de exemplo
-  const isPreview = typeof window !== "undefined" && window.location.hostname.includes("v0.dev")
-
-  // Se estamos em modo preview ou não temos métricas, use dados mockados
-  const shouldUseMock = isPreview || !metrics || metrics.length === 0
-
-  // Calcular métricas com base nos dados recebidos ou usar mockados
-  const stats = calculateStats(metrics, shouldUseMock)
+  // Verificação se estamos em ambiente de preview
+  const isPreview =
+    typeof window !== "undefined" &&
+    (window.location.hostname.includes("v0.dev") || window.location.hostname.includes("vercel.app"))
 
   if (isLoading) {
     return (
@@ -36,6 +33,36 @@ export function MetricsStats({ metrics, isLoading }) {
       </div>
     )
   }
+
+  // Se não há métricas E não está em preview, mostrar alerta
+  if (!metrics || metrics.length === 0) {
+    if (!isPreview) {
+      return (
+        <Alert>
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Nenhum dado encontrado</AlertTitle>
+          <AlertDescription>
+            Não há métricas cadastradas para o período selecionado. Use a página de cadastro de métricas para adicionar
+            dados.
+          </AlertDescription>
+        </Alert>
+      )
+    }
+
+    // Em preview, mostrar dados de exemplo
+    return (
+      <Alert>
+        <AlertCircle className="h-4 w-4" />
+        <AlertTitle>Dados de demonstração</AlertTitle>
+        <AlertDescription>
+          Você está visualizando dados de exemplo. Em produção, os dados reais serão exibidos aqui.
+        </AlertDescription>
+      </Alert>
+    )
+  }
+
+  // Calcular métricas com base nos dados recebidos
+  const stats = calculateStats(metrics)
 
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -103,22 +130,7 @@ export function MetricsStats({ metrics, isLoading }) {
 }
 
 // Função para calcular estatísticas a partir das métricas
-function calculateStats(metrics, useMock = false) {
-  // Se for para usar mock ou não temos métricas, retorne dados de exemplo
-  if (useMock) {
-    return {
-      resolutionRate: 91.2,
-      responseTime: 3.7,
-      csatScore: 4.5,
-      evaluatedPercentage: 82.3,
-      comparisonResolutionRate: 3.4,
-      comparisonResponseTime: -5.2,
-      comparisonCsatScore: 2.1,
-      comparisonEvaluatedPercentage: 5.7,
-    }
-  }
-
-  // Calcular médias a partir dos dados reais
+function calculateStats(metrics) {
   try {
     const totalMetrics = metrics.length
 
@@ -162,16 +174,16 @@ function calculateStats(metrics, useMock = false) {
     }
   } catch (error) {
     console.error("Erro ao calcular estatísticas:", error)
-    // Retornar dados de exemplo em caso de erro nos cálculos
+    // Retornar zeros em caso de erro
     return {
-      resolutionRate: 88.5,
-      responseTime: 4.2,
-      csatScore: 4.3,
-      evaluatedPercentage: 75.8,
-      comparisonResolutionRate: 1.7,
-      comparisonResponseTime: -2.1,
-      comparisonCsatScore: 3.2,
-      comparisonEvaluatedPercentage: 4.5,
+      resolutionRate: 0,
+      responseTime: 0,
+      csatScore: 0,
+      evaluatedPercentage: 0,
+      comparisonResolutionRate: 0,
+      comparisonResponseTime: 0,
+      comparisonCsatScore: 0,
+      comparisonEvaluatedPercentage: 0,
     }
   }
 }

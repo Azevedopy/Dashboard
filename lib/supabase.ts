@@ -6,112 +6,90 @@ const supabaseAnonKey =
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndtaXNkYml4eHB6aGhpaHVqdWViIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDMzMDE0MTksImV4cCI6MjA1ODg3NzQxOX0.V3NspT501soozWpzRPfOc8wyNTVRehan-pE0cmc6iTM"
 
-// Criar o cliente Supabase
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+// Criar o cliente Supabase principal (exportação nomeada necessária)
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    persistSession: false,
+    autoRefreshToken: false,
+  },
+  realtime: {
+    params: {
+      eventsPerSecond: 10,
+    },
+  },
+  global: {
+    headers: {
+      "x-client-info": "support-dashboard",
+    },
+  },
+})
 
 // Variável para armazenar a instância do cliente Supabase (singleton pattern)
 let supabaseInstance: ReturnType<typeof createClient> | null = null
 
 // Função para criar um novo cliente Supabase (mantendo compatibilidade)
 export function getSupabase() {
+  // Verificar se estamos em ambiente que não suporta Supabase
+  if (
+    typeof window !== "undefined" &&
+    (window.location.hostname.includes("v0.dev") || window.location.hostname.includes("localhost"))
+  ) {
+    console.log("🔄 Ambiente de desenvolvimento/preview - usando dados mockados")
+    return null
+  }
+
   if (supabaseInstance) return supabaseInstance
 
   try {
     // Usar a instância já criada acima
     supabaseInstance = supabase
+    console.log("✅ Cliente Supabase inicializado com sucesso")
     return supabaseInstance
   } catch (error) {
     console.error("❌ Erro ao inicializar cliente Supabase:", error)
 
-    // Em ambiente de desenvolvimento/preview, criar um cliente mock
+    // Em ambiente de desenvolvimento/preview, retornar null para usar dados mockados
     if (typeof window !== "undefined" && window.location.hostname.includes("v0.dev")) {
-      console.log("🔄 Criando cliente Supabase mock para ambiente de preview")
-      return createMockSupabaseClient()
+      console.log("🔄 Usando dados mockados para ambiente de preview")
+      return null
     }
 
     return null
   }
 }
 
-// Cliente mock para ambiente de preview
-function createMockSupabaseClient() {
-  return {
-    from: (table: string) => ({
-      select: (columns: string) => ({
-        eq: (column: string, value: any) => ({
-          single: async () => ({ data: null, error: null }),
-          order: (column: string, { ascending }: { ascending: boolean }) => ({
-            then: async () => ({ data: [], error: null }),
-          }),
-          in: (column: string, values: any[]) => ({
-            order: (column: string, { ascending }: { ascending: boolean }) => ({
-              then: async () => ({ data: [], error: null }),
-            }),
-          }),
-        }),
-        order: (column: string, { ascending }: { ascending: boolean }) => ({
-          then: async () => ({ data: [], error: null }),
-        }),
-        gte: (column: string, value: any) => ({
-          lte: (column: string, value: any) => ({
-            eq: (column: string, value: any) => ({
-              order: (column: string, { ascending }: { ascending: boolean }) => ({
-                then: async () => ({ data: [], error: null }),
-              }),
-              order: (column: string, { ascending }: { ascending: boolean }) => ({
-                then: async () => ({ data: [], error: null }),
-              }),
-            }),
-            order: (column: string, { ascending }: { ascending: boolean }) => ({
-              then: async () => ({ data: [], error: null }),
-            }),
-          }),
-          order: (column: string, { ascending }: { ascending: boolean }) => ({
-            then: async () => ({ data: [], error: null }),
-          }),
-        }),
-        lte: (column: string, value: any) => ({
-          order: (column: string, { ascending }: { ascending: boolean }) => ({
-            then: async () => ({ data: [], error: null }),
-          }),
-        }),
-        ilike: (column: string, value: any) => ({
-          then: async () => ({ data: [], error: null }),
-        }),
-        in: (column: string, values: any[]) => ({
-          order: (column: string, { ascending }: { ascending: boolean }) => ({
-            then: async () => ({ data: [], error: null }),
-          }),
-        }),
-        then: async () => ({ data: [], error: null }),
-      }),
-      insert: (data: any[]) => ({
-        select: () => ({
-          single: async () => ({ data: null, error: null }),
-          then: async () => ({ data: [], error: null }),
-        }),
-        then: async () => ({ data: null, error: null }),
-      }),
-      update: (data: any) => ({
-        eq: (column: string, value: any) => ({
-          select: () => ({
-            single: async () => ({ data: null, error: null }),
-          }),
-          then: async () => ({ data: null, error: null }),
-        }),
-      }),
-      delete: () => ({
-        eq: (column: string, value: any) => ({
-          then: async () => ({ error: null }),
-        }),
-      }),
-    }),
-    auth: {
-      getSession: async () => ({ data: { session: null }, error: null }),
-    },
+// Função para testar a conexão
+export async function testSupabaseConnection() {
+  try {
+    const client = getSupabase()
+    if (!client) {
+      return { success: false, error: "Cliente não inicializado" }
+    }
+
+    // Testar uma consulta simples com timeout
+    const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 5000))
+
+    const queryPromise = client.from("members").select("count").limit(1)
+
+    const { data, error } = await Promise.race([queryPromise, timeoutPromise])
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    return { success: true, data }
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : "Erro desconhecido" }
   }
 }
 
+// Função para resetar o cliente (útil para debugging)
+export function resetSupabaseClient() {
+  supabaseInstance = null
+  console.log("🔄 Cliente Supabase resetado")
+}
+
+// Tipos TypeScript para compatibilidade
 export type Member = {
   id: string
   name: string

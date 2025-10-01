@@ -2,11 +2,18 @@ import { getSupabase } from "./supabase"
 import type { Member, MetricEntry, DailyMetric, MemberMetrics } from "./types"
 import { format } from "date-fns"
 
+// Função auxiliar para detectar ambiente de preview
+function isPreviewEnvironment(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    (window.location.hostname.includes("v0.dev") || window.location.hostname.includes("vercel.app"))
+  )
+}
+
 // Função auxiliar para converter snake_case para camelCase
 function snakeToCamel(metrics: MetricEntry[]): MetricEntry[] {
   return metrics.map((metric) => ({
     ...metric,
-    // Adicionamos propriedades camelCase mantendo as snake_case existentes
     resolutionRate: metric.resolution_rate,
     averageResponseTime: metric.average_response_time,
     csatScore: metric.csat_score,
@@ -21,34 +28,137 @@ function formatDecimal(value: number): number {
   return Number.parseFloat(value.toFixed(2))
 }
 
+// Função para gerar dados mockados realistas (APENAS para preview)
+function generateMockMetrics(days = 30) {
+  const mockMembers = [
+    { id: "1", name: "Ana Silva", service_type: "suporte" },
+    { id: "2", name: "Carlos Santos", service_type: "suporte" },
+    { id: "3", name: "Maria Oliveira", service_type: "suporte" },
+    { id: "4", name: "João Costa", service_type: "suporte" },
+  ]
+
+  const metrics = []
+  const today = new Date()
+
+  for (let i = 0; i < days; i++) {
+    const date = new Date(today)
+    date.setDate(date.getDate() - i)
+    const dateString = date.toISOString().split("T")[0]
+
+    for (const member of mockMembers) {
+      const resolutionRate = Math.floor(Math.random() * 30) + 70
+      const avgResponseTime = Math.floor(Math.random() * 120) + 30
+      const csatScore = (Math.random() * 1.5 + 3.5).toFixed(1)
+      const evaluatedPercentage = Math.floor(Math.random() * 40) + 60
+      const openTickets = Math.floor(Math.random() * 15) + 5
+      const resolvedTickets = Math.floor(Math.random() * 25) + 10
+
+      metrics.push({
+        id: `mock-${member.id}-${i}`,
+        member_id: member.id,
+        member: member.name,
+        date: dateString,
+        resolution_rate: resolutionRate,
+        average_response_time: avgResponseTime,
+        csat_score: Number.parseFloat(csatScore),
+        evaluated_percentage: evaluatedPercentage,
+        open_tickets: openTickets,
+        resolved_tickets: resolvedTickets,
+        service_type: member.service_type,
+        resolutionRate,
+        averageResponseTime: avgResponseTime,
+        csatScore: Number.parseFloat(csatScore),
+        evaluatedPercentage,
+        openTickets,
+        resolvedTickets,
+        serviceType: member.service_type,
+      })
+    }
+  }
+
+  return metrics
+}
+
 // Members
 export async function getMembers(): Promise<Member[]> {
   try {
+    // Verificar se estamos em ambiente de preview
+    if (isPreviewEnvironment()) {
+      console.log("👥 Ambiente de preview - usando membros mockados")
+      return [
+        {
+          id: "1",
+          name: "Ana Silva",
+          email: "ana@empresa.com",
+          service_type: "suporte",
+          role: "Atendente",
+          joined_at: "2024-01-01",
+          created_at: "2024-01-01",
+          access_type: "member",
+        },
+        {
+          id: "2",
+          name: "Carlos Santos",
+          email: "carlos@empresa.com",
+          service_type: "suporte",
+          role: "Atendente",
+          joined_at: "2024-01-01",
+          created_at: "2024-01-01",
+          access_type: "member",
+        },
+        {
+          id: "3",
+          name: "Maria Oliveira",
+          email: "maria@empresa.com",
+          service_type: "suporte",
+          role: "Atendente",
+          joined_at: "2024-01-01",
+          created_at: "2024-01-01",
+          access_type: "member",
+        },
+        {
+          id: "4",
+          name: "João Costa",
+          email: "joao@empresa.com",
+          service_type: "suporte",
+          role: "Atendente",
+          joined_at: "2024-01-01",
+          created_at: "2024-01-01",
+          access_type: "member",
+        },
+      ]
+    }
+
     const supabase = getSupabase()
     if (!supabase) {
-      console.error("❌ Supabase client not initialized")
+      console.error("❌ Cliente Supabase não disponível")
       return []
     }
 
     const { data, error } = await supabase.from("members").select("*").order("name")
 
     if (error) {
-      console.error("Error fetching members:", error)
+      console.error("❌ Erro ao buscar membros:", error)
       return []
     }
 
+    console.log(`✅ ${data?.length || 0} membros encontrados no banco`)
     return data || []
   } catch (error) {
-    console.error("Unexpected error fetching members:", error)
+    console.error("❌ Erro inesperado ao buscar membros:", error)
     return []
   }
 }
 
 export async function getMemberById(id: string): Promise<Member | null> {
   try {
+    if (isPreviewEnvironment()) {
+      const mockMembers = await getMembers()
+      return mockMembers.find((m) => m.id === id) || null
+    }
+
     const supabase = getSupabase()
     if (!supabase) {
-      console.error("❌ Supabase client not initialized")
       return null
     }
 
@@ -68,9 +178,18 @@ export async function getMemberById(id: string): Promise<Member | null> {
 
 export async function createMember(member: Omit<Member, "id" | "joined_at" | "created_at">): Promise<Member | null> {
   try {
+    if (isPreviewEnvironment()) {
+      console.log("👥 Simulando criação de membro em ambiente de preview")
+      return {
+        ...member,
+        id: `mock-${Date.now()}`,
+        joined_at: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+      } as Member
+    }
+
     const supabase = getSupabase()
     if (!supabase) {
-      console.error("❌ Supabase client not initialized")
       return null
     }
 
@@ -88,74 +207,7 @@ export async function createMember(member: Omit<Member, "id" | "joined_at" | "cr
   }
 }
 
-// Função para gerar dados mockados para ambiente de preview
-function getMockMetrics(): MetricEntry[] {
-  const mockData = [
-    {
-      id: "1",
-      member_id: "1",
-      member: "João Silva",
-      date: "2024-05-01",
-      resolution_rate: 95,
-      average_response_time: 2.5,
-      csat_score: 4.8,
-      evaluated_percentage: 85,
-      open_tickets: 12,
-      resolved_tickets: 45,
-      service_type: "suporte",
-      resolutionRate: 95,
-      averageResponseTime: 2.5,
-      csatScore: 4.8,
-      evaluatedPercentage: 85,
-      openTickets: 12,
-      resolvedTickets: 45,
-      serviceType: "suporte",
-    },
-    {
-      id: "2",
-      member_id: "2",
-      member: "Maria Souza",
-      date: "2024-05-02",
-      resolution_rate: 92,
-      average_response_time: 3.1,
-      csat_score: 4.5,
-      evaluated_percentage: 80,
-      open_tickets: 15,
-      resolved_tickets: 38,
-      service_type: "suporte",
-      resolutionRate: 92,
-      averageResponseTime: 3.1,
-      csatScore: 4.5,
-      evaluatedPercentage: 80,
-      openTickets: 15,
-      resolvedTickets: 38,
-      serviceType: "suporte",
-    },
-    {
-      id: "3",
-      member_id: "1",
-      member: "João Silva",
-      date: "2024-05-03",
-      resolution_rate: 88,
-      average_response_time: 2.8,
-      csat_score: 4.6,
-      evaluated_percentage: 90,
-      open_tickets: 18,
-      resolved_tickets: 42,
-      service_type: "suporte",
-      resolutionRate: 88,
-      averageResponseTime: 2.8,
-      csatScore: 4.6,
-      evaluatedPercentage: 90,
-      openTickets: 18,
-      resolvedTickets: 42,
-      serviceType: "suporte",
-    },
-  ]
-  return mockData
-}
-
-// Metrics - AJUSTADA para capturar registros antigos corretamente
+// Metrics
 export async function getMetrics(startDate?: string, endDate?: string, serviceType?: string): Promise<MetricEntry[]> {
   try {
     console.log(`=== INICIANDO BUSCA DE MÉTRICAS ===`)
@@ -163,212 +215,108 @@ export async function getMetrics(startDate?: string, endDate?: string, serviceTy
       `Parâmetros: startDate=${startDate || "TODOS"}, endDate=${endDate || "TODOS"}, serviceType=${serviceType || "TODOS"}`,
     )
 
-    // Verificar se estamos em ambiente de preview
-    const isPreview = typeof window !== "undefined" && window.location.hostname.includes("v0.dev")
-    if (isPreview) {
-      console.log("🔄 Ambiente de preview detectado - retornando dados mockados")
-      return getMockMetrics()
+    // APENAS usar dados mockados em ambiente de preview
+    if (isPreviewEnvironment()) {
+      console.log("🔄 Ambiente de preview - retornando dados mockados")
+      await new Promise((resolve) => setTimeout(resolve, 500))
+      return generateMockMetrics(30)
     }
 
     const supabase = getSupabase()
 
-    // Verificar se o cliente Supabase foi inicializado corretamente
     if (!supabase) {
-      console.error("❌ Erro crítico: Cliente Supabase não inicializado")
-      console.log("🔄 Retornando dados mockados devido a erro de inicialização")
-      return getMockMetrics()
+      console.error("❌ Cliente Supabase não disponível")
+      return []
     }
 
-    // Construir a consulta base
     let query = supabase.from("metrics").select("*")
 
-    // IMPORTANTE: Só aplicar filtros de data se explicitamente fornecidos
     if (startDate) {
-      // Usar >= em vez de > para incluir a data de início
       query = query.gte("date", startDate)
       console.log(`✅ Aplicando filtro: date >= ${startDate}`)
-    } else {
-      console.log("📅 SEM filtro de data de início - buscando TODOS os registros históricos")
     }
 
     if (endDate) {
-      // Usar <= em vez de < para incluir a data de fim
       query = query.lte("date", endDate)
       console.log(`✅ Aplicando filtro: date <= ${endDate}`)
-    } else {
-      console.log("📅 SEM filtro de data de fim - buscando até hoje")
     }
 
     if (serviceType) {
       query = query.eq("service_type", serviceType)
       console.log(`✅ Aplicando filtro: service_type = ${serviceType}`)
-    } else {
-      console.log("🏷️  SEM filtro de tipo de serviço - buscando TODOS os tipos")
     }
 
-    // Ordenar por data (mais recentes primeiro)
     query = query.order("date", { ascending: false })
 
     console.log("🔄 Executando consulta no Supabase...")
 
-    try {
-      const { data: metricsData, error: metricsError } = await query
+    const { data: metricsData, error: metricsError } = await query
 
-      if (metricsError) {
-        console.error("❌ Error fetching metrics:", metricsError)
-        console.log("🔄 Retornando dados mockados devido a erro na consulta")
-        return getMockMetrics()
-      }
-
-      if (!metricsData || metricsData.length === 0) {
-        console.log("❌ Nenhuma métrica encontrada para os filtros especificados")
-        console.log("🔄 Retornando dados mockados para demonstração")
-        return getMockMetrics()
-      }
-
-      console.log(`✅ Encontradas ${metricsData.length} métricas`)
-
-      // Analisar a distribuição temporal dos dados
-      const dates = metricsData.map((m) => m.date).sort()
-      const oldestDate = dates[0]
-      const newestDate = dates[dates.length - 1]
-      console.log(`📅 Período dos dados: ${oldestDate} até ${newestDate}`)
-
-      // Verificar registros antes de 12/05/2024
-      const cutoffDate = "2024-05-12"
-      const beforeCutoff = metricsData.filter((m) => m.date < cutoffDate)
-      const afterCutoff = metricsData.filter((m) => m.date >= cutoffDate)
-
-      console.log(`📊 Registros antes de ${cutoffDate}: ${beforeCutoff.length}`)
-      console.log(`📊 Registros depois de ${cutoffDate}: ${afterCutoff.length}`)
-
-      // Verificar soma de open_tickets nos dados brutos
-      const totalOpenTicketsRaw = metricsData.reduce((sum, metric) => {
-        const openTickets = Number(metric.open_tickets || 0)
-        return sum + openTickets
-      }, 0)
-
-      console.log(`🎫 Soma total de open_tickets nos dados brutos: ${totalOpenTicketsRaw}`)
-
-      // Verificar se há registros com formatos de data diferentes
-      const dateFormats = metricsData.reduce(
-        (acc, metric) => {
-          const dateStr = metric.date
-          if (dateStr.includes("T")) {
-            acc.iso += 1
-          } else if (dateStr.includes("/")) {
-            acc.br += 1
-          } else if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
-            acc.standard += 1
-          } else {
-            acc.other += 1
-          }
-          return acc
-        },
-        { iso: 0, br: 0, standard: 0, other: 0 },
-      )
-
-      console.log("📅 Formatos de data encontrados:", dateFormats)
-
-      // Buscar membros para mapear IDs para nomes
-      try {
-        const { data: membersData, error: membersError } = await supabase.from("members").select("id, name")
-
-        if (membersError) {
-          console.error("⚠️  Error fetching members:", membersError)
-          // Continuar sem nomes de membros
-        }
-
-        // Criar mapa de ID para nome
-        const memberMap = new Map()
-        membersData?.forEach((member) => {
-          memberMap.set(member.id, member.name)
-        })
-
-        console.log(`👥 Mapeamento de membros: ${memberMap.size} membros encontrados`)
-
-        // Processar os dados
-        const processedData = metricsData.map((metric) => {
-          const memberName = memberMap.get(metric.member_id) || "Desconhecido"
-
-          return {
-            ...metric,
-            member: memberName,
-            // Garantir que os valores numéricos sejam números
-            open_tickets: Number(metric.open_tickets || 0),
-            resolved_tickets: Number(metric.resolved_tickets || 0),
-            average_response_time: Number(metric.average_response_time || 0),
-            resolution_rate: Number(metric.resolution_rate || 0),
-            csat_score: Number(metric.csat_score || 0),
-            evaluated_percentage: Number(metric.evaluated_percentage || 0),
-          }
-        })
-
-        // Verificar soma após processamento
-        const totalOpenTicketsProcessed = processedData.reduce((sum, metric) => {
-          return sum + metric.open_tickets
-        }, 0)
-
-        console.log(`🎫 Soma de open_tickets após processamento: ${totalOpenTicketsProcessed}`)
-
-        // Adicionar propriedades camelCase para compatibilidade
-        const result = snakeToCamel(processedData)
-
-        console.log(`✅ Retornando ${result.length} registros processados`)
-        console.log(`=== BUSCA DE MÉTRICAS CONCLUÍDA ===`)
-
-        return result
-      } catch (memberError) {
-        console.error("❌ Erro ao buscar membros:", memberError)
-        // Continuar sem nomes de membros, retornar dados brutos com camelCase
-        const result = snakeToCamel(metricsData)
-        return result
-      }
-    } catch (queryError) {
-      console.error("❌ Erro na execução da consulta:", queryError)
-      console.log("🔄 Retornando dados mockados devido a erro na execução da consulta")
-      return getMockMetrics()
+    if (metricsError) {
+      console.error("❌ Erro ao buscar métricas:", metricsError)
+      return []
     }
+
+    if (!metricsData || metricsData.length === 0) {
+      console.log("⚠️ Nenhuma métrica encontrada no banco de dados")
+      return []
+    }
+
+    console.log(`✅ ${metricsData.length} métricas encontradas no banco`)
+
+    // Buscar nomes dos membros
+    const { data: membersData } = await supabase.from("members").select("id, name")
+
+    const memberMap = new Map()
+    membersData?.forEach((member) => {
+      memberMap.set(member.id, member.name)
+    })
+
+    const processedData = metricsData.map((metric) => {
+      const memberName = memberMap.get(metric.member_id) || "Desconhecido"
+
+      return {
+        ...metric,
+        member: memberName,
+        open_tickets: Number(metric.open_tickets || 0),
+        resolved_tickets: Number(metric.resolved_tickets || 0),
+        average_response_time: Number(metric.average_response_time || 0),
+        resolution_rate: Number(metric.resolution_rate || 0),
+        csat_score: Number(metric.csat_score || 0),
+        evaluated_percentage: Number(metric.evaluated_percentage || 0),
+      }
+    })
+
+    const result = snakeToCamel(processedData)
+
+    console.log(`✅ Retornando ${result.length} registros processados`)
+    return result
   } catch (error) {
-    console.error("❌ Unexpected error fetching metrics:", error)
-    // Retornar dados mockados para desenvolvimento se estiver em ambiente de preview
-    console.log("🔄 Retornando dados mockados devido a erro inesperado")
-    return getMockMetrics()
+    console.error("❌ Erro inesperado ao buscar métricas:", error)
+    return []
   }
 }
 
-// Resto das funções permanecem iguais...
 export async function getGenierMetrics(startDate?: string, endDate?: string): Promise<MetricEntry[]> {
   try {
-    // Verificar se estamos em ambiente de preview
-    const isPreview = typeof window !== "undefined" && window.location.hostname.includes("v0.dev")
-    if (isPreview) {
-      console.log("🔄 Ambiente de preview detectado - retornando dados mockados para Genier")
-      return getMockMetrics().filter((m) => m.member.includes("Genier"))
+    if (isPreviewEnvironment()) {
+      console.log("🔄 Ambiente de preview - retornando dados mockados para Genier")
+      return generateMockMetrics(30).filter((m) => m.member.includes("Silva"))
     }
 
     const supabase = getSupabase()
     if (!supabase) {
-      console.error("❌ Supabase client not initialized")
       return []
     }
 
-    // Primeiro, buscar os IDs dos membros Genier
     const { data: members, error: membersError } = await supabase.from("members").select("id").ilike("name", "%genier%")
 
-    if (membersError) {
-      console.error("Error fetching Genier members:", membersError)
-      return []
-    }
-
-    // Se não encontramos membros Genier, retornar array vazio
-    if (!members || members.length === 0) {
+    if (membersError || !members || members.length === 0) {
       return []
     }
 
     const genierIds = members.map((m) => m.id)
 
-    // Agora buscar as métricas desses membros
     let query = supabase.from("metrics").select("*").in("member_id", genierIds).order("date", { ascending: false })
 
     if (startDate) {
@@ -386,23 +334,19 @@ export async function getGenierMetrics(startDate?: string, endDate?: string): Pr
       return []
     }
 
-    // Buscar nomes dos membros
     const { data: membersData } = await supabase.from("members").select("id, name").in("id", genierIds)
 
-    // Criar um mapa de ID para nome
     const memberMap = new Map()
     membersData?.forEach((member) => {
       memberMap.set(member.id, member.name)
     })
 
-    // Processar os dados para incluir o nome do membro
     const processedData =
       data?.map((item) => ({
         ...item,
         member: memberMap.get(item.member_id) || "Genier",
       })) || []
 
-    // Adicionar propriedades em camelCase para compatibilidade
     return snakeToCamel(processedData)
   } catch (error) {
     console.error("Unexpected error fetching Genier metrics:", error)
@@ -412,16 +356,13 @@ export async function getGenierMetrics(startDate?: string, endDate?: string): Pr
 
 export async function getMemberMetrics(memberId: string, startDate?: string, endDate?: string): Promise<MetricEntry[]> {
   try {
-    // Verificar se estamos em ambiente de preview
-    const isPreview = typeof window !== "undefined" && window.location.hostname.includes("v0.dev")
-    if (isPreview) {
-      console.log("🔄 Ambiente de preview detectado - retornando dados mockados para membro")
-      return getMockMetrics().filter((m) => m.member_id === memberId)
+    if (isPreviewEnvironment()) {
+      console.log("🔄 Ambiente de preview - retornando dados mockados para membro")
+      return generateMockMetrics(30).filter((m) => m.member_id === memberId)
     }
 
     const supabase = getSupabase()
     if (!supabase) {
-      console.error("❌ Supabase client not initialized")
       return []
     }
 
@@ -442,7 +383,6 @@ export async function getMemberMetrics(memberId: string, startDate?: string, end
       return []
     }
 
-    // Adicionar propriedades em camelCase para compatibilidade
     return snakeToCamel(data || [])
   } catch (error) {
     console.error("Unexpected error fetching member metrics:", error)
@@ -450,12 +390,9 @@ export async function getMemberMetrics(memberId: string, startDate?: string, end
   }
 }
 
-// Função para criar métricas
 export async function createMetric(metricData: any): Promise<MetricEntry | null> {
   try {
-    // Verificar se estamos em ambiente de preview
-    const isPreview = typeof window !== "undefined" && window.location.hostname.includes("v0.dev")
-    if (isPreview) {
+    if (isPreviewEnvironment()) {
       console.log("🔄 Ambiente de preview - simulando criação de métrica")
       return {
         ...metricData,
@@ -466,21 +403,17 @@ export async function createMetric(metricData: any): Promise<MetricEntry | null>
 
     const supabase = getSupabase()
     if (!supabase) {
-      console.error("❌ Supabase client not initialized")
       return null
     }
 
-    // Usar a data exatamente como está, sem ajustes de fuso horário
     const date = metricData.date
     console.log(`Data a ser salva no banco: ${date}`)
 
-    // Formatar valores decimais para ter no máximo 2 casas decimais
     const resolution_rate = formatDecimal(metricData.resolution_rate || 0)
     const average_response_time = formatDecimal(metricData.average_response_time || 0)
     const csat_score = formatDecimal(metricData.csat_score || 0)
     const evaluated_percentage = formatDecimal(metricData.evaluated_percentage || 0)
 
-    // Usar snake_case para os nomes das colunas (formato do banco)
     const data = {
       member_id: metricData.member_id,
       date: date,
@@ -504,7 +437,6 @@ export async function createMetric(metricData: any): Promise<MetricEntry | null>
 
     console.log("Métrica salva com sucesso:", result)
 
-    // Adicionar propriedades em camelCase para compatibilidade
     return {
       ...result,
       resolutionRate: result.resolution_rate,
@@ -521,12 +453,9 @@ export async function createMetric(metricData: any): Promise<MetricEntry | null>
   }
 }
 
-// Função para atualizar uma métrica existente
 export async function updateMetric(id: string, metricData: any): Promise<MetricEntry | null> {
   try {
-    // Verificar se estamos em ambiente de preview
-    const isPreview = typeof window !== "undefined" && window.location.hostname.includes("v0.dev")
-    if (isPreview) {
+    if (isPreviewEnvironment()) {
       console.log("🔄 Ambiente de preview - simulando atualização de métrica")
       return {
         ...metricData,
@@ -537,17 +466,14 @@ export async function updateMetric(id: string, metricData: any): Promise<MetricE
 
     const supabase = getSupabase()
     if (!supabase) {
-      console.error("❌ Supabase client not initialized")
       return null
     }
 
-    // Formatar valores decimais para ter no máximo 2 casas decimais
     const resolution_rate = formatDecimal(metricData.resolution_rate || 0)
     const average_response_time = formatDecimal(metricData.average_response_time || 0)
     const csat_score = formatDecimal(metricData.csat_score || 0)
     const evaluated_percentage = formatDecimal(metricData.evaluated_percentage || 0)
 
-    // Usar snake_case para os nomes das colunas (formato do banco)
     const data = {
       resolution_rate: resolution_rate,
       average_response_time: average_response_time,
@@ -569,7 +495,6 @@ export async function updateMetric(id: string, metricData: any): Promise<MetricE
 
     console.log("Métrica atualizada com sucesso:", result)
 
-    // Adicionar propriedades em camelCase para compatibilidade
     return {
       ...result,
       resolutionRate: result.resolution_rate,
@@ -586,12 +511,9 @@ export async function updateMetric(id: string, metricData: any): Promise<MetricE
   }
 }
 
-// Função para excluir uma métrica
 export async function deleteMetric(id: string): Promise<boolean> {
   try {
-    // Verificar se estamos em ambiente de preview
-    const isPreview = typeof window !== "undefined" && window.location.hostname.includes("v0.dev")
-    if (isPreview) {
+    if (isPreviewEnvironment()) {
       console.log("🔄 Ambiente de preview - simulando exclusão de métrica")
       return true
     }
@@ -616,17 +538,17 @@ export async function deleteMetric(id: string): Promise<boolean> {
   }
 }
 
-// Aggregated metrics
 export async function getAggregatedMetrics(startDate?: string, endDate?: string): Promise<DailyMetric[]> {
   try {
-    // First get all metrics for the date range
     const metrics = await getMetrics(startDate, endDate)
 
-    // Then get all members to calculate averages
-    const members = await getMembers()
-    const memberCount = members.length || 1 // Avoid division by zero
+    if (metrics.length === 0) {
+      return []
+    }
 
-    // Group metrics by date
+    const members = await getMembers()
+    const memberCount = members.length || 1
+
     const dailyMetrics: Record<string, DailyMetric> = {}
 
     metrics.forEach((metric) => {
@@ -650,7 +572,6 @@ export async function getAggregatedMetrics(startDate?: string, endDate?: string)
       dailyMetrics[metric.date].resolved_tickets += metric.resolved_tickets
     })
 
-    // Calculate averages and format to 2 decimal places
     Object.keys(dailyMetrics).forEach((date) => {
       dailyMetrics[date].resolution_rate = formatDecimal(dailyMetrics[date].resolution_rate / memberCount)
       dailyMetrics[date].average_response_time = formatDecimal(dailyMetrics[date].average_response_time / memberCount)
@@ -667,17 +588,22 @@ export async function getAggregatedMetrics(startDate?: string, endDate?: string)
 
 export async function getTopPerformers(): Promise<MemberMetrics[]> {
   try {
-    // Get all members
     const members = await getMembers()
 
-    // Get metrics for the last 30 days
+    if (members.length === 0) {
+      return []
+    }
+
     const thirtyDaysAgo = new Date()
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
     const startDate = format(thirtyDaysAgo, "yyyy-MM-dd")
 
     const metrics = await getMetrics(startDate)
 
-    // Group metrics by member
+    if (metrics.length === 0) {
+      return []
+    }
+
     const memberMetrics: Record<string, MemberMetrics> = {}
 
     members.forEach((member) => {
@@ -693,7 +619,6 @@ export async function getTopPerformers(): Promise<MemberMetrics[]> {
       }
     })
 
-    // Sort by average CSAT score
     return Object.values(memberMetrics)
       .filter((item) => item.metrics.length > 0)
       .sort((a, b) => {
@@ -707,12 +632,9 @@ export async function getTopPerformers(): Promise<MemberMetrics[]> {
   }
 }
 
-// Upload data from CSV
 export async function uploadMetricsFromCSV(csvData: any[]): Promise<{ success: boolean; message: string }> {
   try {
-    // Verificar se estamos em ambiente de preview
-    const isPreview = typeof window !== "undefined" && window.location.hostname.includes("v0.dev")
-    if (isPreview) {
+    if (isPreviewEnvironment()) {
       console.log("🔄 Ambiente de preview - simulando upload de CSV")
       return { success: true, message: `${csvData.length} registros importados com sucesso (simulado)` }
     }
@@ -729,7 +651,7 @@ export async function uploadMetricsFromCSV(csvData: any[]): Promise<{ success: b
 
     const formattedData = csvData.map((row) => ({
       member_id: row.member_id,
-      date: row.date, // Manter a data original do CSV
+      date: row.date,
       resolution_rate: formatDecimal(Number.parseFloat(row.resolution_rate || "0")),
       average_response_time: formatDecimal(Number.parseFloat(row.average_response_time || "0")),
       csat_score: formatDecimal(Number.parseFloat(row.csat_score || "0")),

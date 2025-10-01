@@ -12,7 +12,7 @@ const inter = Inter({ subsets: ["latin"] })
 export const metadata: Metadata = {
   title: "Dashboard de Métricas de Suporte",
   description: "Dashboard para visualização de métricas de atendimento de suporte",
-    generator: 'v0.dev'
+    generator: 'v0.app'
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

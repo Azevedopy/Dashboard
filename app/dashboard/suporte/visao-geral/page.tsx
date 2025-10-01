@@ -1,201 +1,339 @@
 "use client"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Button } from "@/components/ui/button"
-import { RefreshCw, Search } from "lucide-react"
-import { MetricsStats } from "@/components/dashboard/metrics-stats"
-import { SupportStats } from "@/components/support/support-stats"
+
 import { useState, useEffect } from "react"
-import { getMetrics } from "@/lib/data-service"
-import { getSupportMetrics } from "@/lib/support-metrics-service"
-import { runDiagnostics } from "@/lib/diagnostics-service"
-import { format, subDays } from "date-fns"
-import { toast } from "@/components/ui/use-toast"
-import { Toaster } from "@/components/ui/toaster"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Badge } from "@/components/ui/badge"
+import { RefreshCw, TrendingUp, Clock, Users, CheckCircle, AlertCircle } from "lucide-react"
+import { getMetrics, getMembers } from "@/lib/data-service"
+import { toast } from "sonner"
 
-export default function VisaoGeralPage() {
-  const [metrics, setMetrics] = useState([])
-  const [supportMetrics, setSupportMetrics] = useState(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const [period, setPeriod] = useState("30d")
-  const [isRefreshing, setIsRefreshing] = useState(false)
-  const [isPreview] = useState(typeof window !== "undefined" && window.location.hostname.includes("v0.dev"))
+interface MetricData {
+  id: string
+  member_id: string
+  member: string
+  date: string
+  resolution_rate: number
+  average_response_time: number
+  csat_score: number
+  evaluated_percentage: number
+  open_tickets: number
+  resolved_tickets: number
+  service_type: string
+}
 
+interface Member {
+  id: string
+  name: string
+  service_type: string
+  email: string
+}
+
+export default function SuporteVisaoGeral() {
+  const [metrics, setMetrics] = useState<MetricData[]>([])
+  const [members, setMembers] = useState<Member[]>([])
+  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+  const [selectedPeriod, setSelectedPeriod] = useState("30")
+  const [selectedMember, setSelectedMember] = useState<string>("all")
+
+  // Função para buscar dados
+  const fetchData = async (showToast = false) => {
+    try {
+      setRefreshing(true)
+
+      if (showToast) {
+        toast.info("Atualizando dados...")
+      }
+
+      console.log("🔄 Iniciando busca de dados...")
+
+      // Calcular datas baseado no período selecionado
+      const endDate = new Date().toISOString().split("T")[0]
+      const startDate = new Date()
+      startDate.setDate(startDate.getDate() - Number.parseInt(selectedPeriod))
+      const startDateString = startDate.toISOString().split("T")[0]
+
+      console.log(`📅 Período: ${startDateString} até ${endDate}`)
+
+      // Buscar métricas e membros em paralelo
+      const [metricsData, membersData] = await Promise.all([
+        getMetrics(startDateString, endDate, selectedMember !== "all" ? [selectedMember] : undefined, "suporte"),
+        getMembers("suporte"),
+      ])
+
+      console.log(`📊 Dados obtidos: ${metricsData.length} métricas, ${membersData.length} membros`)
+
+      setMetrics(metricsData)
+      setMembers(membersData)
+
+      if (showToast) {
+        toast.success(`Dados atualizados! ${metricsData.length} registros carregados.`)
+      }
+    } catch (error) {
+      console.error("❌ Erro ao buscar dados:", error)
+      toast.error("Erro ao carregar dados. Usando dados de demonstração.")
+
+      // Em caso de erro, manter dados existentes ou usar dados vazios
+      if (metrics.length === 0) {
+        setMetrics([])
+        setMembers([])
+      }
+    } finally {
+      setLoading(false)
+      setRefreshing(false)
+    }
+  }
+
+  // Carregar dados iniciais
   useEffect(() => {
     fetchData()
-  }, [period])
+  }, [selectedPeriod, selectedMember])
 
-  const fetchData = async () => {
-    setIsLoading(true)
-    try {
-      let startDate
-      const endDate = format(new Date(), "yyyy-MM-dd")
-
-      switch (period) {
-        case "7d":
-          startDate = format(subDays(new Date(), 7), "yyyy-MM-dd")
-          break
-        case "15d":
-          startDate = format(subDays(new Date(), 15), "yyyy-MM-dd")
-          break
-        case "30d":
-        default:
-          startDate = format(subDays(new Date(), 30), "yyyy-MM-dd")
-          break
+  // Calcular estatísticas
+  const calculateStats = () => {
+    if (metrics.length === 0) {
+      return {
+        avgResolutionRate: 0,
+        avgResponseTime: 0,
+        avgCSAT: 0,
+        totalTickets: 0,
+        resolvedTickets: 0,
+        openTickets: 0,
+        evaluatedPercentage: 0,
       }
+    }
 
-      console.log(`🔄 Buscando dados de suporte de ${startDate} até ${endDate} (${period})`)
+    const totalMetrics = metrics.length
 
-      try {
-        // Buscar métricas calculadas de suporte COM FILTRO DE DATA
-        console.log("📈 Iniciando busca de métricas de suporte...")
-        const supportMetricsData = await getSupportMetrics(startDate, endDate)
-        console.log("📈 Support metrics calculated for period:", supportMetricsData)
-        setSupportMetrics(supportMetricsData)
-
-        // Buscar métricas gerais com filtro de data
-        console.log("📊 Iniciando busca de métricas gerais...")
-        const metricsData = await getMetrics(startDate, endDate)
-        console.log(`📊 Fetched ${metricsData.length} metrics for support dashboard (${period})`)
-        setMetrics(metricsData)
-
-        // Mostrar toast de sucesso apenas se não estivermos em preview
-        if (!isPreview) {
-          toast({
-            title: "Dados carregados com sucesso",
-            description: `Métricas atualizadas para o período de ${period.replace("d", " dias")}.`,
-          })
-        }
-      } catch (fetchError) {
-        console.error("❌ Error fetching specific data:", fetchError)
-
-        // Em caso de erro, ainda definir dados padrão para evitar erros de renderização
-        setSupportMetrics(null)
-        setMetrics([])
-
-        toast({
-          title: "Erro ao carregar dados",
-          description: isPreview
-            ? "Dados de demonstração carregados para ambiente de preview."
-            : "Alguns dados podem estar incompletos. Verifique sua conexão.",
-          variant: isPreview ? "default" : "destructive",
-        })
-      }
-    } catch (error) {
-      console.error("❌ Error in overall fetch process:", error)
-
-      // Definir dados vazios para evitar erros de renderização
-      setMetrics([])
-      setSupportMetrics(null)
-
-      toast({
-        title: "Erro ao carregar dados",
-        description: isPreview
-          ? "Dados de demonstração carregados para ambiente de preview."
-          : "Não foi possível carregar os dados. Tente novamente mais tarde.",
-        variant: isPreview ? "default" : "destructive",
-      })
-    } finally {
-      setIsLoading(false)
+    return {
+      avgResolutionRate: Math.round(metrics.reduce((sum, m) => sum + (m.resolution_rate || 0), 0) / totalMetrics),
+      avgResponseTime: Math.round(metrics.reduce((sum, m) => sum + (m.average_response_time || 0), 0) / totalMetrics),
+      avgCSAT: Math.round(metrics.reduce((sum, m) => sum + (m.csat_score || 0), 0) / totalMetrics),
+      totalTickets: metrics.reduce((sum, m) => sum + (m.open_tickets || 0) + (m.resolved_tickets || 0), 0),
+      resolvedTickets: metrics.reduce((sum, m) => sum + (m.resolved_tickets || 0), 0),
+      openTickets: metrics.reduce((sum, m) => sum + (m.open_tickets || 0), 0),
+      evaluatedPercentage: Math.round(
+        metrics.reduce((sum, m) => sum + (m.evaluated_percentage || 0), 0) / totalMetrics,
+      ),
     }
   }
 
-  const handleRefresh = async () => {
-    setIsRefreshing(true)
-    await fetchData()
-    setIsRefreshing(false)
-    toast({
-      title: "Dados atualizados",
-      description: `Os dados foram atualizados para o período selecionado (${period}).`,
-    })
-  }
+  const stats = calculateStats()
 
-  const handleDiagnostics = async () => {
-    if (isPreview) {
-      toast({
-        title: "Diagnóstico simulado",
-        description: "Em ambiente de preview, os diagnósticos são apenas simulados.",
-      })
-      return
-    }
-
-    try {
-      console.log("🔍 Executando diagnóstico completo...")
-      await runDiagnostics()
-      toast({
-        title: "Diagnóstico executado",
-        description: "Verifique o console para ver os resultados detalhados.",
-      })
-    } catch (error) {
-      console.error("❌ Erro ao executar diagnóstico:", error)
-      toast({
-        title: "Erro no diagnóstico",
-        description: "Não foi possível executar o diagnóstico completo.",
-        variant: "destructive",
-      })
-    }
-  }
-
-  const getPeriodLabel = () => {
-    switch (period) {
-      case "7d":
-        return "últimos 7 dias"
-      case "15d":
-        return "últimos 15 dias"
-      case "30d":
+  // Função para determinar cor do badge baseado no valor
+  const getBadgeVariant = (value: number, type: "rate" | "time" | "score") => {
+    switch (type) {
+      case "rate":
+      case "score":
+        return value >= 90 ? "default" : value >= 70 ? "secondary" : "destructive"
+      case "time":
+        return value <= 60 ? "default" : value <= 120 ? "secondary" : "destructive"
       default:
-        return "últimos 30 dias"
+        return "secondary"
     }
+  }
+
+  if (loading) {
+    return (
+      <div className="container mx-auto p-6">
+        <div className="flex items-center justify-center min-h-[400px]">
+          <div className="flex items-center gap-2">
+            <RefreshCw className="h-6 w-6 animate-spin" />
+            <span className="text-lg">Carregando dados...</span>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Cabeçalho com faixa azul e texto branco */}
-      <div className="p-6 bg-[#0056D6] text-white">
-        <h1 className="text-2xl font-bold text-white">Visão Geral - Suporte</h1>
-        <p className="text-sm text-white/90">
-          {isPreview && "(MODO PREVIEW) "}Resumo das principais métricas de atendimento - {getPeriodLabel()}
-        </p>
-      </div>
-
-      <div className="p-6 space-y-6">
-        <div className="flex justify-between items-center">
-          <Tabs defaultValue={period} onValueChange={setPeriod} value={period}>
-            <TabsList>
-              <TabsTrigger value="7d">Últimos 7 dias</TabsTrigger>
-              <TabsTrigger value="15d">Últimos 15 dias</TabsTrigger>
-              <TabsTrigger value="30d">Últimos 30 dias</TabsTrigger>
-            </TabsList>
-          </Tabs>
-
-          <div className="flex gap-2">
-            <Button variant="outline" size="icon" onClick={handleDiagnostics} title="Executar diagnóstico completo">
-              <Search className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={handleRefresh}
-              disabled={isRefreshing}
-              title="Atualizar dados"
-            >
-              <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
-            </Button>
-          </div>
+    <div className="container mx-auto p-6 space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h1 className="text-3xl font-bold">Visão Geral - Suporte</h1>
+          <p className="text-muted-foreground">Acompanhe as métricas de desempenho da equipe de suporte</p>
         </div>
 
-        {/* Cards de métricas de suporte calculadas */}
-        <div className="mb-6">
-          <h2 className="text-lg font-semibold mb-4">Métricas Principais</h2>
-          <SupportStats stats={supportMetrics} isLoading={isLoading} />
-        </div>
+        <div className="flex flex-col sm:flex-row gap-2">
+          {/* Filtro de Período */}
+          <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
+            <SelectTrigger className="w-[140px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="7">Últimos 7 dias</SelectItem>
+              <SelectItem value="15">Últimos 15 dias</SelectItem>
+              <SelectItem value="30">Últimos 30 dias</SelectItem>
+            </SelectContent>
+          </Select>
 
-        {/* Métricas detalhadas existentes */}
-        <div className="mb-6">
-          <h2 className="text-lg font-semibold mb-4">Métricas Detalhadas</h2>
-          <MetricsStats metrics={metrics} isLoading={isLoading} />
+          {/* Filtro de Membro */}
+          <Select value={selectedMember} onValueChange={setSelectedMember}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos os membros</SelectItem>
+              {members.map((member) => (
+                <SelectItem key={member.id} value={member.id}>
+                  {member.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {/* Botão de Atualizar */}
+          <Button onClick={() => fetchData(true)} disabled={refreshing} variant="outline" size="sm">
+            <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? "animate-spin" : ""}`} />
+            Atualizar
+          </Button>
         </div>
       </div>
-      <Toaster />
+
+      {/* Status Badge */}
+      <div className="flex items-center gap-2">
+        <Badge variant="outline" className="flex items-center gap-1">
+          <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+          {metrics.length > 0 ? `${metrics.length} registros carregados` : "Dados de demonstração"}
+        </Badge>
+        {selectedMember !== "all" && (
+          <Badge variant="secondary">Filtrado por: {members.find((m) => m.id === selectedMember)?.name}</Badge>
+        )}
+      </div>
+
+      {/* Cards de Estatísticas */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Taxa de Resolução */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Taxa de Resolução</CardTitle>
+            <CheckCircle className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-between">
+              <div className="text-2xl font-bold">{stats.avgResolutionRate}%</div>
+              <Badge variant={getBadgeVariant(stats.avgResolutionRate, "rate")}>
+                {stats.avgResolutionRate >= 90 ? "Excelente" : stats.avgResolutionRate >= 70 ? "Bom" : "Atenção"}
+              </Badge>
+            </div>
+            <p className="text-xs text-muted-foreground">Média dos últimos {selectedPeriod} dias</p>
+          </CardContent>
+        </Card>
+
+        {/* Tempo Médio de Resposta */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Tempo Médio de Resposta</CardTitle>
+            <Clock className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-between">
+              <div className="text-2xl font-bold">{stats.avgResponseTime}min</div>
+              <Badge variant={getBadgeVariant(stats.avgResponseTime, "time")}>
+                {stats.avgResponseTime <= 60 ? "Rápido" : stats.avgResponseTime <= 120 ? "Médio" : "Lento"}
+              </Badge>
+            </div>
+            <p className="text-xs text-muted-foreground">Tempo para primeira resposta</p>
+          </CardContent>
+        </Card>
+
+        {/* CSAT Score */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">CSAT Score</CardTitle>
+            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-between">
+              <div className="text-2xl font-bold">{stats.avgCSAT}%</div>
+              <Badge variant={getBadgeVariant(stats.avgCSAT, "score")}>
+                {stats.avgCSAT >= 90 ? "Excelente" : stats.avgCSAT >= 70 ? "Bom" : "Atenção"}
+              </Badge>
+            </div>
+            <p className="text-xs text-muted-foreground">Satisfação do cliente</p>
+          </CardContent>
+        </Card>
+
+        {/* Total de Tickets */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total de Tickets</CardTitle>
+            <Users className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.totalTickets}</div>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span className="flex items-center gap-1">
+                <CheckCircle className="h-3 w-3 text-green-500" />
+                {stats.resolvedTickets} resolvidos
+              </span>
+              <span className="flex items-center gap-1">
+                <AlertCircle className="h-3 w-3 text-orange-500" />
+                {stats.openTickets} abertos
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Informações Adicionais */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Resumo da Equipe */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Resumo da Equipe</CardTitle>
+            <CardDescription>Informações sobre a equipe de suporte</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-medium">Membros Ativos</span>
+                <Badge variant="outline">{members.length}</Badge>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-medium">Período Analisado</span>
+                <Badge variant="secondary">{selectedPeriod} dias</Badge>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-medium">% Avaliado</span>
+                <Badge variant={getBadgeVariant(stats.evaluatedPercentage, "score")}>
+                  {stats.evaluatedPercentage}%
+                </Badge>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Status do Sistema */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Status do Sistema</CardTitle>
+            <CardDescription>Informações sobre a conexão e dados</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-medium">Conexão</span>
+                <Badge variant="outline" className="flex items-center gap-1">
+                  <div className="w-2 h-2 bg-green-500 rounded-full" />
+                  Online
+                </Badge>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-medium">Última Atualização</span>
+                <span className="text-sm text-muted-foreground">{new Date().toLocaleTimeString()}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-medium">Registros</span>
+                <Badge variant="secondary">{metrics.length}</Badge>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   )
 }
